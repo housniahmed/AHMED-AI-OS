@@ -11,7 +11,23 @@ from core.retrieval.scoring import fuse_scores
 from core.retrieval.security import filter_by_sensitivity
 
 
-class StaticRetriever(LexicalRetriever, SemanticRetriever, MetadataRetriever):
+class StaticLexical(LexicalRetriever):
+    def __init__(self, candidates):
+        self.candidates = candidates
+
+    def search(self, query):
+        return self.candidates
+
+
+class StaticSemantic(SemanticRetriever):
+    def __init__(self, candidates):
+        self.candidates = candidates
+
+    def search(self, query):
+        return self.candidates
+
+
+class StaticMetadata(MetadataRetriever):
     def __init__(self, candidates):
         self.candidates = candidates
 
@@ -35,7 +51,9 @@ def candidate(content, *, lexical=0, semantic=0, metadata=0, sensitivity="intern
 def test_fusion_ranks_by_combined_signal():
     first = candidate("first", lexical=1, semantic=0, metadata=0)
     second = candidate("second", lexical=0, semantic=1, metadata=0)
-    ranked = fuse_scores([first, second], lexical_weight=0.2, semantic_weight=0.8, metadata_weight=0)
+    ranked = fuse_scores(
+        [first, second], lexical_weight=0.2, semantic_weight=0.8, metadata_weight=0
+    )
     assert ranked[0].content == "second"
 
 
@@ -51,20 +69,13 @@ def test_engine_merges_provider_signals_and_preserves_top_k():
     shared = candidate("shared", lexical=0.2, semantic=0.9, metadata=0.7)
     other = candidate("other", lexical=0.9, semantic=0.1, metadata=0.1)
 
-    class Lexical(StaticRetriever):
-        def search(self, query):
-            return [shared, other]
-
-    class Semantic(StaticRetriever):
-        def search(self, query):
-            return [shared]
-
-    class Metadata(StaticRetriever):
-        def search(self, query):
-            return [shared]
-
     query = RetrievalQuery("question", top_k=1)
-    result = HybridRetrievalEngine(Lexical([]), Semantic([]), Metadata([])).retrieve(query)
+    result = HybridRetrievalEngine(
+        StaticLexical([shared, other]),
+        StaticSemantic([shared]),
+        StaticMetadata([shared]),
+    ).retrieve(query)
+
     assert len(result.candidates) == 1
     assert result.candidates[0].content == "shared"
     assert result.citations[0]["source_id"] == "fixture"
