@@ -31,6 +31,8 @@ class PlanningEngine:
     def add_project(self, project: Project) -> Project:
         if project.id in self._projects:
             raise ValueError(f"project already exists: {project.id}")
+        if not project.goal_ids:
+            raise ValueError("project must reference at least one goal")
         for goal_id in project.goal_ids:
             if goal_id not in self._goals:
                 raise ValueError(f"unknown goal: {goal_id}")
@@ -142,7 +144,13 @@ class PlanningEngine:
             t.id for t in tasks
             if t.status == TaskStatus.BLOCKED
         )
-        overdue_ids = tuple(t.id for t in self.overdue_tasks(now, project_id))
+        now = now or datetime.now(timezone.utc)
+        overdue_ids = tuple(
+            t.id for t in tasks
+            if t.due_at is not None
+            and t.due_at < now
+            and t.status not in (TaskStatus.COMPLETED, TaskStatus.CANCELLED)
+        )
         return PlanningSnapshot(
             goal_id=goal_id,
             project_id=project_id,
