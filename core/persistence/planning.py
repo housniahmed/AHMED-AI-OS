@@ -122,7 +122,12 @@ class PostgresPlanningRepository:
                     WHEN 'medium' THEN 2 ELSE 1 END DESC,
                     t.due_at NULLS LAST, t.id""", (str(project_id),))
             ids=[UUID(str(r[0])) for r in cur.fetchall()]
-        return tuple(self.get_task(i) for i in ids if self.get_task(i) is not None)
+        tasks = []
+        for task_id in ids:
+            task = self.get_task(task_id)
+            if task is not None:
+                tasks.append(task)
+        return tuple(tasks)
 
     def overdue_tasks(self, project_id: UUID, now) -> tuple[Task, ...]:
         with self.connection.cursor() as cur:
