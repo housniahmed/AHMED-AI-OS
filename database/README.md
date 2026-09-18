@@ -17,3 +17,17 @@ The first persistence schema uses PostgreSQL as the system of record.
 3. pgvector extension and embedding table
 4. Hybrid retrieval (metadata + lexical + semantic)
 5. Reranking and context assembly
+
+
+## Brique 14 — Persistence scope
+
+The schema now persists the planning hierarchy introduced by Brique 13:
+Goals, Projects, project-goal links, Milestones, Tasks and task dependencies.
+Temporal Events are also persisted as canonical time objects.
+
+Foreign keys and CHECK constraints enforce structural invariants at the database
+boundary. Application services remain responsible for domain-level transition
+rules such as dependency completion before starting a task.
+
+The PostgreSQL schema is the system of record; in-memory engines remain useful
+for deterministic unit tests.
