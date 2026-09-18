@@ -60,9 +60,9 @@ tests/       # automated tests
 
 ## Status
 
-**Architecture build — B1 through B26 contracts implemented**
+**Architecture build — B1 through B27 contracts implemented**
 
-The repository is being built incrementally with explicit contracts, provider-neutral core components, and tests. B26 adds external integration ports for Calendar, Gmail, and Telegram without claiming live account connectivity.
+The repository is being built incrementally with explicit contracts, provider-neutral core components, and tests. B26 adds external integration ports for Calendar, Gmail, and Telegram without claiming live account connectivity. B27 adds the provider-neutral Business OS domain for CRM, sales, offers, deals, and campaigns.
 
 ### Current integration boundary
 
