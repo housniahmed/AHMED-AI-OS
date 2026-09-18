@@ -60,6 +60,15 @@ tests/       # automated tests
 
 ## Status
 
-**Phase 0 — Architecture bootstrap**
+**Architecture build — B1 through B26 contracts implemented**
 
-The repository is intentionally starting from an empty baseline so that the architecture can be built incrementally with explicit decisions and evaluation criteria.
+The repository is being built incrementally with explicit contracts, provider-neutral core components, and tests. B26 adds external integration ports for Calendar, Gmail, and Telegram without claiming live account connectivity.
+
+### Current integration boundary
+
+- Calendar: provider contract + service layer; adapter/OAuth connection still required.
+- Gmail: provider contract + service layer; adapter/OAuth connection still required.
+- Telegram: provider contract + service layer; adapter/bot credentials still required.
+- External writes must continue through the existing Tool Execution Gateway and approval/governance controls.
+
+Tests are added as implementation artifacts and are not described as passing unless they have been executed.
