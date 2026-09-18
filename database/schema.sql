@@ -5,6 +5,11 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS user_context (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    display_name TEXT NOT NULL DEFAULT '',
+    email TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','archived')),
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    locale TEXT NOT NULL DEFAULT 'en-US',
     profile JSONB NOT NULL DEFAULT '{}'::jsonb,
     preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
     procedures JSONB NOT NULL DEFAULT '{}'::jsonb,
