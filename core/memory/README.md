@@ -1,18 +1,28 @@
-# Memory Lifecycle & Learning Engine — Brique 9
+# Memory Layer — B1 / B9 / B19
 
-Brique 9 defines how memory evolves after capture.
+## B19 — Advanced Memory
 
-## Lifecycle
+B19 adds deterministic recall and maintenance above the existing memory repository and lifecycle.
 
-`CAPTURE -> VALIDATE -> CONSOLIDATE -> UPDATE -> DECAY -> ARCHIVE`
+Flow:
 
-The implementation is deliberately conservative:
+CAPTURE -> VALIDATE -> STORE -> RECALL -> RANK -> CONSOLIDATE / DECAY / ARCHIVE
 
-- memories require content and provenance;
-- validity windows are checked explicitly;
-- stale memories are flagged as decay candidates;
-- exact duplicates are detected deterministically;
-- no memory is silently deleted or overwritten;
-- semantic similarity, contradiction detection and learned importance are deferred until the retrieval/embedding infrastructure is mature.
+Recall combines four explicit signals:
+- lexical relevance: 35%
+- recency: 25%
+- confidence: 20%
+- explicit importance metadata: 20%
 
-This is a lifecycle policy layer, not yet an autonomous learning system. Future iterations can add confidence updates, contradiction handling, semantic consolidation and user-approved forgetting.
+These are engineering defaults, not experimentally optimized weights.
+
+## Safety
+
+- Sensitivity is filtered before recall results are returned.
+- Expired memories are excluded from recall.
+- No memory is automatically deleted.
+- Exact duplicates are reported, not silently removed.
+- Contradictions are not inferred from text.
+- Importance is read only from explicit metadata["importance"]; it is never guessed.
+
+Embeddings, semantic similarity, contradiction detection, vector databases and learned importance remain injectable future capabilities.
