@@ -16,6 +16,8 @@ class UserContextService:
         if identity.user_id in self._records:
             raise ValueError(f"user already exists: {identity.user_id}")
         self._validate_identity(identity)
+        if identity.status != UserStatus.ACTIVE:
+            raise PermissionError("only active users can be created")
         record = UserContextRecord(identity=identity)
         self._records[identity.user_id] = record
         return record
