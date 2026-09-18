@@ -1,13 +1,22 @@
-# Tool Registry & Runtime — Brique 7
+# Tool Registry, Runtime & B17 Gateway
 
-Brique 7 creates the controlled boundary between agent planning and external capabilities.
+B17 is the controlled boundary between agent proposals and registered tool handlers.
 
 ## Flow
 
-`DISCOVER -> SELECT -> AUTHORIZE -> EXECUTE -> RECORD`
+AgentAction -> GatewayRequest -> ToolSpec validation -> ToolCall -> ToolRuntime -> ToolResult
 
-Every tool has an explicit `ToolSpec` with a name, description, action level and schemas. A registry exposes only registered tools. The runtime binds implementations separately from their descriptions.
+The gateway is provider-neutral and does not know about Gmail, GitHub, Telegram, APIs, MCP servers, or vendor SDKs.
 
-The default policy is deny-by-default: a tool must be explicitly allow-listed, and tools marked `EXECUTE` additionally require explicit approval.
+## Security invariants
 
-No provider-specific SDK is part of the core. Gmail, Calendar, GitHub, browser, filesystem and other integrations can be added later as adapters.
+1. The tool must be registered.
+2. The action level must not exceed the registered tool level.
+3. ToolRuntime's allow-list remains authoritative.
+4. Execute-level tools require explicit approval.
+5. The gateway never calls handlers directly.
+6. Batch execution preserves request order and returns per-call results.
+
+B18 will add richer human approval and governance. B17 does not implement approval workflows, roles, audit persistence, rate limiting, or secrets management.
+
+B7 remains the registry/runtime foundation; B17 adds the explicit gateway boundary above it.
