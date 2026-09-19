@@ -30,5 +30,7 @@ def test_conversation_to_orchestrator():
             agent_state=AgentState("hello",phase=AgentPhase.COMPLETE,result="orchestrated")
         ))
     )).create(user)
-    result=c
-    assert result.user_id==user
+    result=service.send(c.id,"hello")
+    assert result.message.content=="orchestrated"
+    assert result.provider_configured
+    assert orchestrator.requests[0].user_id==user
