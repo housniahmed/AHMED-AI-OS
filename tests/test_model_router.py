@@ -37,6 +37,7 @@ def test_router_honors_explicit_model():
     assert response.model == "model-a"
 
 from core.models.providers import ModelProviderError
+from core.models.resilience import RetryPolicy
 
 def test_router_falls_back_after_recoverable_provider_error():
     class FailingProvider(ModelProvider):
@@ -53,6 +54,7 @@ def test_router_falls_back_after_recoverable_provider_error():
         {"primary": primary, "backup": backup},
         (ModelRoute(ModelTask.CHAT, "primary", "primary-model", 100),
          ModelRoute(ModelTask.CHAT, "backup", "backup-model", 50)),
+        retry_policy=RetryPolicy(max_attempts=1),
     )
     response = router.generate(ModelRequest(ModelTask.CHAT, input_text="hello"))
     assert response.provider == "backup"
