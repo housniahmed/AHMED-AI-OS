@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import RLock
-from time import monotonic, time
+from time import sleep
 from typing import Protocol
 
 
@@ -99,7 +99,7 @@ class JsonFileProviderHealthStore:
             temp.replace(self.path)
 
 
-def sleep_backoff(policy: RetryPolicy, attempt: int, *, sleeper=time) -> None:
+def sleep_backoff(policy: RetryPolicy, attempt: int, *, sleeper=sleep) -> None:
     """Compatibility hook; router supplies its own sleep implementation."""
     delay = min(policy.backoff_seconds * (2 ** max(attempt - 1, 0)), policy.max_backoff_seconds)
     if delay > 0:
