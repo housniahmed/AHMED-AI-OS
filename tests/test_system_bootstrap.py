@@ -1,6 +1,6 @@
 from core.identity.models import UserIdentity
 from core.orchestration.models import OrchestrationRequest
-from core.system.bootstrap import SystemBootstrap
+from core.system.bootstrap import GatewayActionExecutor, SystemBootstrap
 from core.conversation.service import OrchestratorConversationProvider
 
 
@@ -10,6 +10,8 @@ def test_bootstrap_shares_core_services():
     assert isinstance(system.conversations._provider, OrchestratorConversationProvider)
     assert system.gateway.security is system.security
     assert system.gateway.governance is system.governance
+    assert isinstance(system.agent.executor, GatewayActionExecutor)
+    assert system.agent.executor.gateway is system.gateway
 
 
 def test_provider_free_stack_is_explicit_and_does_not_execute_tools():
