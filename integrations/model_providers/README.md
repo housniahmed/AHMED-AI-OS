@@ -1,29 +1,27 @@
-# B38 — Model Provider Management / Multi-Provider Runtime
+# B39 — Model Reliability & Resilience
 
-B38 extends B37 from a single provider to a managed multi-provider runtime.
+B39 adds reliability controls around the B38 multi-provider runtime.
 
-## Runtime behavior
+## Controls
 
-- Multiple providers can be registered against the same task.
-- Routes are ordered by explicit priority.
-- Provider failures represented by ModelProviderError trigger deterministic fallback to the next eligible route.
-- Provider state tracks enabled/disabled status, successes, failures, and the last error.
-- Providers and routes can be registered or removed at runtime.
-- An operator can disable a provider without changing agent code.
-- An explicit ModelRequest.model continues to constrain routing to that model.
+- Retry policy: bounded attempts with exponential backoff.
+- Circuit breaker: opens after a configurable consecutive-failure threshold.
+- Cooldown/recovery: an open circuit becomes eligible again after cooldown and resets on successful recovery.
+- Rate-limit handling: HTTP 429 is marked rate-limited and honors the provider Retry-After header when available.
+- Timeouts: each provider keeps its own request timeout from its provider settings.
+- Health state: successes, failures, consecutive failures, last error, timestamps, circuit state, and cooldown are persisted through an injectable health store.
+- Durability: JsonFileProviderHealthStore provides simple single-process durable persistence; production deployments can inject a database/Redis-backed implementation through the same contract.
 
-## Architecture
+## Runtime
 
-Provider adapters -> ModelProvider -> ModelRouter -> B36 ModelAgentPlanner
+Provider A -> retry -> circuit protection -> fallback -> Provider B
 
-The router owns policy and fallback; provider adapters own transport/vendor semantics.
+The router never executes tools. B6, B17, B33 and B18 remain responsible for agent execution, security and governance.
 
-## Environment
+## Failure semantics
 
-B37 single-provider variables remain supported. For multiple providers, use MODEL_PROVIDER_IDS and namespaced variables such as PRIMARY and BACKUP.
+Only ModelProviderError failures enter the resilience policy. Provider adapters classify errors using retryable, rate_limited, and retry_after_seconds.
 
-Credentials remain environment-only. No provider secret is stored in the repository.
+Non-retryable failures move directly to the next eligible provider.
 
-## Boundary
-
-Fallback does not bypass B6, B17, B33 or B18. The router only selects a model provider and returns a model response; it never executes an agent action.
+All resilience timing is injectable in tests, so reliability tests do not need real waiting.
