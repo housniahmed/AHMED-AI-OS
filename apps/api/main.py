@@ -8,9 +8,10 @@ from uuid import UUID, uuid4
 from core.governance.models import ApprovalDecision
 from core.identity.models import UserIdentity
 from core.system.bootstrap import SystemBootstrap
+from integrations.model_providers.openai_compatible import build_model_router_from_env
 
 app = FastAPI(title="AHMED AI OS API", version="0.1.0", description="API boundary for the personal AI operating system.")
-system = SystemBootstrap().build()
+system = SystemBootstrap(model_router=build_model_router_from_env()).build()
 identity_service = system.identity
 business_os = system.business
 conversation_service = system.conversations
@@ -86,12 +87,7 @@ class ApprovalInput(BaseModel):
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health():
-    return HealthResponse(
-        status="ok",
-        service="ahmed-ai-os-api",
-        version=app.version,
-        system_composed=True,
-    )
+    return HealthResponse(status="ok", service="ahmed-ai-os-api", version=app.version, system_composed=True)
 
 
 @app.post("/v1/users", response_model=UserResponse, status_code=201, tags=["identity"])
@@ -206,9 +202,7 @@ def get_approval(request_id: UUID):
 @app.post("/v1/governance/requests/{request_id}/decision", response_model=ApprovalResponse, tags=["governance"])
 def decide_approval(request_id: UUID, input: ApprovalInput):
     try:
-        d = governance_service.decide(
-            request_id, input.decision, input.approver_id, reason=input.reason
-        )
+        d = governance_service.decide(request_id, input.decision, input.approver_id, reason=input.reason)
         return ApprovalResponse(
             request_id=d.request_id, decision=d.decision.value,
             reason=d.reason, approver_id=d.approver_id,
