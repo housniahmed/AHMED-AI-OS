@@ -57,3 +57,26 @@ def test_environment_factory_rejects_partial_configuration(monkeypatch):
     monkeypatch.setenv("MODEL_PROVIDER_MODEL", "test-model")
     with pytest.raises(ModelProviderConfigurationError):
         build_model_router_from_env()
+
+
+
+def test_environment_factory_builds_multiple_providers(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER_IDS", "primary,backup")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_NAME", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_BASE_URL", "https://primary.example/v1")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_API_KEY", "primary-secret")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_MODEL", "primary-model")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_PRIORITY", "100")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_TASKS", "chat,reasoning")
+    monkeypatch.setenv("MODEL_PROVIDER_BACKUP_NAME", "backup")
+    monkeypatch.setenv("MODEL_PROVIDER_BACKUP_BASE_URL", "https://backup.example/v1")
+    monkeypatch.setenv("MODEL_PROVIDER_BACKUP_API_KEY", "backup-secret")
+    monkeypatch.setenv("MODEL_PROVIDER_BACKUP_MODEL", "backup-model")
+    monkeypatch.setenv("MODEL_PROVIDER_BACKUP_PRIORITY", "50")
+    monkeypatch.setenv("MODEL_PROVIDER_BACKUP_TASKS", "chat,reasoning")
+
+    router = build_model_router_from_env()
+    assert router is not None
+    assert set(router.providers) == {"primary", "backup"}
+    assert router.route(ModelRequest(task=ModelTask.CHAT, input_text="hi")).provider == "primary"
+    assert router.route(ModelRequest(task=ModelTask.REASONING, input_text="hi")).provider == "primary"
