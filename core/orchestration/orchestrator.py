@@ -38,7 +38,11 @@ class UnifiedOrchestrator:
                 raise ValueError("context provider returned a different user identity")
             planning_snapshot = self._planning_snapshot(context)
             upcoming, overdue = self._temporal_snapshot()
-            agent_state = self.agent_runtime.run(request.text, approval=self._effective_approval(request))
+            agent_state = self.agent_runtime.run(
+                request.text,
+                approval=self._effective_approval(request),
+                user_id=request.user_id,
+            )
             if agent_state.phase.value == "approve":
                 state = OrchestrationState.WAITING_APPROVAL
             elif agent_state.phase.value == "complete":
