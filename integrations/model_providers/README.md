@@ -1,28 +1,29 @@
-# B37 — Real Model Provider
+# B38 — Model Provider Management / Multi-Provider Runtime
 
-B37 connects AHMED AI OS to an external model through a provider adapter while keeping the core model contracts vendor-neutral.
+B38 extends B37 from a single provider to a managed multi-provider runtime.
 
-Architecture:
+## Runtime behavior
 
-Environment / Secrets -> OpenAI-compatible adapter -> ModelProvider -> ModelRouter -> B36 ModelAgentPlanner
+- Multiple providers can be registered against the same task.
+- Routes are ordered by explicit priority.
+- Provider failures represented by ModelProviderError trigger deterministic fallback to the next eligible route.
+- Provider state tracks enabled/disabled status, successes, failures, and the last error.
+- Providers and routes can be registered or removed at runtime.
+- An operator can disable a provider without changing agent code.
+- An explicit ModelRequest.model continues to constrain routing to that model.
 
-The adapter targets providers exposing the OpenAI-compatible POST /chat/completions contract. It is isolated under integrations/ so vendor HTTP semantics and credentials do not leak into core/.
+## Architecture
 
-Configuration:
+Provider adapters -> ModelProvider -> ModelRouter -> B36 ModelAgentPlanner
 
-- MODEL_PROVIDER_BASE_URL
-- MODEL_PROVIDER_API_KEY
-- MODEL_PROVIDER_MODEL
-- MODEL_PROVIDER_NAME (optional; defaults to openai-compatible)
-- MODEL_PROVIDER_TIMEOUT_SECONDS (optional; defaults to 30)
+The router owns policy and fallback; provider adapters own transport/vendor semantics.
 
-build_model_router_from_env() returns None when no provider variables are configured, preserving provider-free development. Partial configuration fails loudly instead of silently falling back.
+## Environment
 
-Boundaries:
+B37 single-provider variables remain supported. For multiple providers, use MODEL_PROVIDER_IDS and namespaced variables such as PRIMARY and BACKUP.
 
-- Credentials are read from environment variables and never embedded in source files.
-- Provider HTTP failures become explicit ModelProviderRequestError exceptions.
-- The adapter never executes tools.
-- B36 still produces proposals; B6, B17, B33 and B18 remain responsible for execution, security and governance.
-- Embeddings are not implemented by this chat provider.
-- Tests inject a fake HTTP transport and make no network calls.
+Credentials remain environment-only. No provider secret is stored in the repository.
+
+## Boundary
+
+Fallback does not bypass B6, B17, B33 or B18. The router only selects a model provider and returns a model response; it never executes an agent action.
