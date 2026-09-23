@@ -19,4 +19,4 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["core*"]
+include = ["core*", "apps*"]
