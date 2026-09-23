@@ -8,13 +8,7 @@ from typing import Callable
 
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
-from core.models.resilience import (
-    CircuitBreakerPolicy,
-    InMemoryProviderHealthStore,
-    ProviderHealthState,
-    ProviderHealthStore,
-    RetryPolicy,
-)
+from core.models.resilience import CircuitBreakerPolicy, InMemoryProviderHealthStore, ProviderHealthState, ProviderHealthStore, RetryPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,17 +27,12 @@ class ProviderRuntimeState(ProviderHealthState):
 class ModelRouter:
     """Route requests with priority, retries, circuit breaking, and durable health state."""
 
-    def __init__(
-        self,
-        providers: dict[str, ModelProvider],
-        routes: tuple[ModelRoute, ...],
-        *,
-        retry_policy: RetryPolicy | None = None,
-        circuit_policy: CircuitBreakerPolicy | None = None,
-        health_store: ProviderHealthStore | None = None,
-        clock: Callable[[], float] = time,
-        sleeper: Callable[[float], None] = sleep,
-    ) -> None:
+    def __init__(self, providers: dict[str, ModelProvider], routes: tuple[ModelRoute, ...], *,
+                 retry_policy: RetryPolicy | None = None,
+                 circuit_policy: CircuitBreakerPolicy | None = None,
+                 health_store: ProviderHealthStore | None = None,
+                 clock: Callable[[], float] = time,
+                 sleeper: Callable[[float], None] = sleep) -> None:
         self.providers = dict(providers)
         self.routes = tuple(routes)
         self.retry_policy = retry_policy or RetryPolicy()
@@ -75,8 +64,7 @@ class ModelRouter:
     def set_provider_enabled(self, provider_name: str, enabled: bool) -> None:
         if provider_name not in self.providers:
             raise KeyError(provider_name)
-        state = self._states[provider_name]
-        state.enabled = enabled
+        self._states[provider_name].enabled = enabled
         self._persist(provider_name)
 
     def add_route(self, route: ModelRoute) -> None:
@@ -99,12 +87,7 @@ class ModelRouter:
         return candidates[0]
 
     def _candidates(self, request: ModelRequest) -> list[ModelRoute]:
-        candidates = [
-            r for r in self.routes
-            if r.task == request.task
-            and r.provider in self.providers
-            and self._eligible(r.provider)
-        ]
+        candidates = [r for r in self.routes if r.task == request.task and r.provider in self.providers and self._eligible(r.provider)]
         if request.model:
             candidates = [r for r in candidates if r.model == request.model]
         return sorted(candidates, key=lambda r: r.priority, reverse=True)
@@ -115,8 +98,7 @@ class ModelRouter:
             return False
         if not state.circuit_open:
             return True
-        cooldown_until = state.cooldown_until
-        if cooldown_until is not None and self.clock() >= cooldown_until:
+        if state.cooldown_until is not None and self.clock() >= state.cooldown_until:
             state.circuit_open = False
             state.opened_at = None
             state.cooldown_until = None
@@ -129,41 +111,31 @@ class ModelRouter:
         candidates = self._candidates(request)
         if not candidates:
             raise LookupError(f"no model route for task={request.task.value}")
-
         errors: list[str] = []
         for route in candidates:
-            provider = self.providers[route.provider]
-            routed = ModelRequest(
-                request.task, request.messages, request.input_text,
-                route.model, request.max_tokens, request.temperature, request.metadata,
-            )
-            attempts = self.retry_policy.max_attempts
-            for attempt in range(1, attempts + 1):
+            routed = ModelRequest(request.task, request.messages, request.input_text, route.model, request.max_tokens, request.temperature, request.metadata)
+            for attempt in range(1, self.retry_policy.max_attempts + 1):
                 try:
-                    response = provider.generate(routed)
+                    response = self.providers[route.provider].generate(routed)
                 except ModelProviderError as exc:
                     self._record_failure(route.provider, exc)
                     errors.append(f"{route.provider}: attempt {attempt}: {exc}")
-                    if attempt < attempts and self._should_retry(exc):
-                        self._backoff(attempt)
+                    if attempt < self.retry_policy.max_attempts and self._should_retry(exc):
+                        self._backoff(attempt, getattr(exc, "retry_after_seconds", None))
                         continue
                     break
                 else:
                     self._record_success(route.provider)
                     return response
-
-        raise ModelProviderError(
-            f"all eligible model providers failed for task={request.task.value}: " + "; ".join(errors)
-        )
+        raise ModelProviderError(f"all eligible model providers failed for task={request.task.value}: " + "; ".join(errors))
 
     def _should_retry(self, error: ModelProviderError) -> bool:
         return bool(getattr(error, "retryable", True))
 
     def _backoff(self, attempt: int, retry_after_seconds: float | None = None) -> None:
-        delay = min(
-            self.retry_policy.backoff_seconds * (2 ** max(attempt - 1, 0)),
-            self.retry_policy.max_backoff_seconds,
-        )
+        delay = min(self.retry_policy.backoff_seconds * (2 ** max(attempt - 1, 0)), self.retry_policy.max_backoff_seconds)
+        if retry_after_seconds is not None:
+            delay = max(delay, retry_after_seconds)
         if delay > 0:
             self.sleeper(delay)
 
@@ -173,10 +145,15 @@ class ModelRouter:
         state.consecutive_failures += 1
         state.last_error = str(error)
         state.last_failure_at = self.clock()
-        if state.consecutive_failures >= self.circuit_policy.failure_threshold:
+        retry_after = getattr(error, "retry_after_seconds", None)
+        rate_limited = bool(getattr(error, "rate_limited", False))
+        if rate_limited or state.consecutive_failures >= self.circuit_policy.failure_threshold:
             state.circuit_open = True
             state.opened_at = self.clock()
-            cooldown = self.circuit_policy.cooldown_seconds\n            if retry_after is not None:\n                cooldown = max(cooldown, retry_after)\n            state.cooldown_until = self.clock() + cooldown
+            cooldown = self.circuit_policy.cooldown_seconds
+            if retry_after is not None:
+                cooldown = max(cooldown, retry_after)
+            state.cooldown_until = self.clock() + cooldown
         self._persist(provider_name)
 
     def _record_success(self, provider_name: str) -> None:
