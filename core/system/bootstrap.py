@@ -7,6 +7,7 @@ that an unavailable provider is configured.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from core.agent.runtime import ActionExecutor, AgentPlanner, AgentRuntime
 from core.business.repository import InMemoryBusinessRepository
@@ -20,7 +21,8 @@ from core.orchestration.orchestrator import UnifiedOrchestrator
 from core.retrieval.engine import HybridRetrievalEngine, LexicalRetriever, MetadataRetriever, SemanticRetriever
 from core.retrieval.models import RetrievalCandidate, RetrievalQuery
 from core.security.service import SecurityService, InMemorySecurityAuditSink
-from core.tools.gateway import ToolExecutionGateway
+from core.tools.gateway import GatewayRequest, ToolExecutionGateway
+from core.tools.models import ToolResult
 from core.tools.registry import ToolRegistry
 from core.tools.runtime import ToolRuntime
 
@@ -39,11 +41,19 @@ class NoOpPlanner(AgentPlanner):
         return ("No model planner is configured; no action was proposed.",), ()
 
 
-class NoOpExecutor(ActionExecutor):
-    """Safety fallback; it is never a substitute for a configured tool gateway."""
+class GatewayActionExecutor(ActionExecutor):
+    """Route every agent execution attempt through B17."""
+
+    def __init__(self, gateway: ToolExecutionGateway) -> None:
+        self.gateway = gateway
 
     def execute(self, action):
-        raise RuntimeError("No action executor is configured.")
+        raise RuntimeError("GatewayActionExecutor requires a user-scoped execution request.")
+
+    def execute_for_user(self, action, user_id: UUID | None = None) -> ToolResult:
+        if user_id is None:
+            raise ValueError("user_id is required for gateway execution")
+        return self.gateway.execute(GatewayRequest(action=action, user_id=user_id)).result
 
 
 @dataclass(slots=True)
@@ -96,7 +106,7 @@ class SystemBootstrap:
         gateway = ToolExecutionGateway(runtime, self.security, self.governance)
 
         agent = self._agent or AgentRuntime(
-            retrieval, context, NoOpPlanner(), NoOpExecutor()
+            retrieval, context, NoOpPlanner(), GatewayActionExecutor(gateway)
         )
         orchestrator = self._orchestrator or UnifiedOrchestrator(self.identity, agent)
         conversations = self._conversations or ConversationService(
