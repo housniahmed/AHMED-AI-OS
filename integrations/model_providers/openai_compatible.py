@@ -67,7 +67,12 @@ def _urllib_transport(url: str, headers: dict[str, str], payload: dict[str, Any]
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise ModelProviderRequestError(\n            f"model provider HTTP {exc.code}: {detail[:500]}",\n            retryable=exc.code in {408, 409, 425, 429} or exc.code >= 500,\n            rate_limited=exc.code == 429,\n            retry_after_seconds=_retry_after_seconds(exc),\n        ) from exc
+        raise ModelProviderRequestError(
+            f"model provider HTTP {exc.code}: {detail[:500]}",
+            retryable=exc.code in {408, 409, 425, 429} or exc.code >= 500,
+            rate_limited=exc.code == 429,
+            retry_after_seconds=_retry_after_seconds(exc),
+        ) from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise ModelProviderRequestError(f"model provider network error: {exc}") from exc
     except json.JSONDecodeError as exc:
