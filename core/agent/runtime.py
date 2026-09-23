@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+from uuid import UUID
 
 from core.agent.models import AgentAction, AgentPhase, AgentState, ApprovalStatus
 from core.agent.permissions import PermissionPolicy
@@ -17,6 +18,10 @@ class ActionExecutor(ABC):
     def execute(self, action: AgentAction) -> Any:
         raise NotImplementedError
 
+    def execute_for_user(self, action: AgentAction, user_id: UUID | None = None) -> Any:
+        """Optional request-scoped execution hook; legacy executors remain valid."""
+        return self.execute(action)
+
 
 class AgentPlanner(ABC):
     @abstractmethod
@@ -25,11 +30,7 @@ class AgentPlanner(ABC):
 
 
 class AgentRuntime:
-    """Run KNOW -> INFER -> PROPOSE and execute only after policy approval.
-
-    The runtime contains no vendor-specific LLM or tool code. Those concerns
-    are injected as retrieval, planning and execution providers.
-    """
+    """Run KNOW -> INFER -> PROPOSE and execute only after policy approval."""
 
     def __init__(self, retrieval: HybridRetrievalEngine, context: ContextEngine,
                  planner: AgentPlanner, executor: ActionExecutor,
@@ -40,7 +41,8 @@ class AgentRuntime:
         self.executor = executor
         self.policy = policy or PermissionPolicy()
 
-    def run(self, request: str, approval: ApprovalStatus = ApprovalStatus.NOT_REQUIRED) -> AgentState:
+    def run(self, request: str, approval: ApprovalStatus = ApprovalStatus.NOT_REQUIRED,
+            user_id: UUID | None = None) -> AgentState:
         state = AgentState(request=request)
         try:
             retrieval = self.retrieval.retrieve(RetrievalQuery(text=request))
@@ -60,7 +62,7 @@ class AgentRuntime:
                 if not self.policy.can_execute(action, approval):
                     return state.transition(AgentPhase.APPROVE, approval=ApprovalStatus.REJECTED)
 
-            results = [self.executor.execute(action) for action in proposals]
+            results = [self.executor.execute_for_user(action, user_id) for action in proposals]
             return state.transition(AgentPhase.EXECUTE, approval=approval, result=results).transition(AgentPhase.COMPLETE)
         except Exception as exc:
             return state.transition(AgentPhase.FAILED, error=str(exc))
