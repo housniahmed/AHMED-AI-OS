@@ -131,13 +131,90 @@ class OpenAICompatibleModelProvider(ModelProvider):
         return {str(key): int(value) for key, value in raw.items() if isinstance(value, (int, float))}
 
 
+def _settings_from_prefix(prefix: str) -> OpenAICompatibleSettings:
+    def value(name: str, default: str = "") -> str:
+        return os.getenv(f"MODEL_PROVIDER_{prefix}_{name}", default).strip()
+
+    base_url = value("BASE_URL")
+    api_key = value("API_KEY")
+    model = value("MODEL")
+    name = value("NAME", prefix.lower())
+    timeout_raw = value("TIMEOUT_SECONDS", "30")
+    if not base_url or not api_key or not model:
+        raise ModelProviderConfigurationError(
+            f"incomplete configuration for provider id '{prefix.lower()}'"
+        )
+    try:
+        timeout = float(timeout_raw)
+    except ValueError as exc:
+        raise ModelProviderConfigurationError(
+            f"MODEL_PROVIDER_{prefix}_TIMEOUT_SECONDS must be numeric"
+        ) from exc
+    if timeout <= 0:
+        raise ModelProviderConfigurationError(
+            f"MODEL_PROVIDER_{prefix}_TIMEOUT_SECONDS must be > 0"
+        )
+    return OpenAICompatibleSettings(base_url.rstrip("/"), api_key, name or prefix.lower(), model, timeout)
+
+
 def build_model_router_from_env() -> ModelRouter | None:
-    """Build chat/reasoning routes when provider configuration is present."""
+    """Build a single- or multi-provider router from environment configuration."""
+    provider_ids = os.getenv("MODEL_PROVIDER_IDS", "").strip()
+    if provider_ids:
+        providers = {}
+        routes = []
+        for raw_id in provider_ids.split(","):
+            provider_id = raw_id.strip()
+            if not provider_id:
+                continue
+            prefix = provider_id.upper().replace("-", "_")
+            settings = _settings_from_prefix(prefix)
+            if settings.provider_name in providers:
+                raise ModelProviderConfigurationError(
+                    f"duplicate provider name: {settings.provider_name}"
+                )
+            provider = OpenAICompatibleModelProvider(settings)
+            providers[provider.name] = provider
+
+            priority_raw = os.getenv(
+                f"MODEL_PROVIDER_{prefix}_PRIORITY", "0"
+            ).strip()
+            try:
+                priority = int(priority_raw)
+            except ValueError as exc:
+                raise ModelProviderConfigurationError(
+                    f"MODEL_PROVIDER_{prefix}_PRIORITY must be an integer"
+                ) from exc
+
+            tasks_raw = os.getenv(
+                f"MODEL_PROVIDER_{prefix}_TASKS", "chat,reasoning"
+            )
+            for task_name in tasks_raw.split(","):
+                task_name = task_name.strip()
+                if not task_name:
+                    continue
+                try:
+                    task = ModelTask(task_name)
+                except ValueError as exc:
+                    raise ModelProviderConfigurationError(
+                        f"unsupported model task '{task_name}' for provider '{provider_id}'"
+                    ) from exc
+                if task == ModelTask.EMBEDDING:
+                    raise ModelProviderConfigurationError(
+                        f"provider '{provider_id}' does not support embedding routes"
+                    )
+                routes.append(ModelRoute(task, provider.name, settings.default_model, priority))
+
+        if not providers:
+            raise ModelProviderConfigurationError("MODEL_PROVIDER_IDS contains no provider ids")
+        return ModelRouter(providers, tuple(routes))
+
     configured = any(os.getenv(name, "").strip() for name in (
         "MODEL_PROVIDER_BASE_URL", "MODEL_PROVIDER_API_KEY", "MODEL_PROVIDER_MODEL"
     ))
     if not configured:
         return None
+
     settings = OpenAICompatibleSettings.from_env()
     provider = OpenAICompatibleModelProvider(settings)
     routes = (
