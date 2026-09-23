@@ -81,7 +81,7 @@ def test_router_records_usage_latency_cost_and_fallback():
             ModelRoute(ModelTask.CHAT, "primary", "primary-model", 100),
             ModelRoute(ModelTask.CHAT, "backup", "backup-model", 50),
         ),
-        retry_policy=__import__("core.models.resilience", fromlist=["RetryPolicy"]).RetryPolicy(max_attempts=1),
+        retry_policy=RetryPolicy(max_attempts=1),
         usage_store=store,
         pricing_catalog=catalog,
         clock=lambda: next(clock_values),
