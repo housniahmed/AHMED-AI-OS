@@ -1,9 +1,4 @@
-"""Dependency composition root for AHMED AI OS.
-
-This module owns wiring. It does not implement an LLM, database, or external
-provider; those remain explicit injection points so the system cannot pretend
-that an unavailable provider is configured.
-"""
+"""Dependency composition root for AHMED AI OS."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +11,8 @@ from core.context.engine import ContextEngine
 from core.conversation.service import ConversationService, OrchestratorConversationProvider
 from core.governance.service import GovernanceService, InMemoryGovernanceAuditSink
 from core.identity.service import UserContextService
+from core.intelligence.planner import ModelAgentPlanner
+from core.models.router import ModelRouter
 from core.observability.service import ObservabilityService, InMemoryObservabilitySink
 from core.orchestration.orchestrator import UnifiedOrchestrator
 from core.retrieval.engine import HybridRetrievalEngine, LexicalRetriever, MetadataRetriever, SemanticRetriever
@@ -68,6 +65,7 @@ class SystemContainer:
     gateway: ToolExecutionGateway
     retrieval: HybridRetrievalEngine
     context: ContextEngine
+    model_router: ModelRouter | None
     agent: AgentRuntime
     orchestrator: UnifiedOrchestrator
     conversations: ConversationService
@@ -84,6 +82,8 @@ class SystemBootstrap:
                  governance: GovernanceService | None = None,
                  retrieval: HybridRetrievalEngine | None = None,
                  context: ContextEngine | None = None,
+                 model_router: ModelRouter | None = None,
+                 planner: AgentPlanner | None = None,
                  agent: AgentRuntime | None = None,
                  orchestrator: UnifiedOrchestrator | None = None,
                  conversations: ConversationService | None = None) -> None:
@@ -94,6 +94,8 @@ class SystemBootstrap:
         self.governance = governance or GovernanceService(InMemoryGovernanceAuditSink())
         self._retrieval = retrieval
         self._context = context
+        self._model_router = model_router
+        self._planner = planner
         self._agent = agent
         self._orchestrator = orchestrator
         self._conversations = conversations
@@ -105,9 +107,14 @@ class SystemBootstrap:
         runtime = ToolRuntime(registry)
         gateway = ToolExecutionGateway(runtime, self.security, self.governance)
 
-        agent = self._agent or AgentRuntime(
-            retrieval, context, NoOpPlanner(), GatewayActionExecutor(gateway)
-        )
+        if self._agent is not None:
+            agent = self._agent
+        else:
+            planner = self._planner
+            if planner is None:
+                planner = ModelAgentPlanner(self._model_router) if self._model_router is not None else NoOpPlanner()
+            agent = AgentRuntime(retrieval, context, planner, GatewayActionExecutor(gateway))
+
         orchestrator = self._orchestrator or UnifiedOrchestrator(self.identity, agent)
         conversations = self._conversations or ConversationService(
             OrchestratorConversationProvider(orchestrator)
@@ -123,6 +130,7 @@ class SystemBootstrap:
             gateway=gateway,
             retrieval=retrieval,
             context=context,
+            model_router=self._model_router,
             agent=agent,
             orchestrator=orchestrator,
             conversations=conversations,
