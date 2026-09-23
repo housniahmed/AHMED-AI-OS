@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+
 from core.models.contracts import ModelRequest, ModelResponse
+
+
+class ModelProviderError(RuntimeError):
+    """Recoverable provider failure that may trigger router fallback."""
 
 
 class ModelProvider(ABC):
