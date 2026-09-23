@@ -79,6 +79,16 @@ def _urllib_transport(url: str, headers: dict[str, str], payload: dict[str, Any]
         raise ModelProviderRequestError("model provider returned invalid JSON") from exc
 
 
+def _retry_after_seconds(exc: HTTPError) -> float | None:
+    raw = exc.headers.get("Retry-After") if exc.headers else None
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return None
+
+
 class OpenAICompatibleModelProvider(ModelProvider):
     """Adapter for providers exposing an OpenAI-compatible /chat/completions API."""
 
