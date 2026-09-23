@@ -159,7 +159,7 @@ class ModelRouter:
     def _should_retry(self, error: ModelProviderError) -> bool:
         return bool(getattr(error, "retryable", True))
 
-    def _backoff(self, attempt: int) -> None:
+    def _backoff(self, attempt: int, retry_after_seconds: float | None = None) -> None:
         delay = min(
             self.retry_policy.backoff_seconds * (2 ** max(attempt - 1, 0)),
             self.retry_policy.max_backoff_seconds,
@@ -176,7 +176,7 @@ class ModelRouter:
         if state.consecutive_failures >= self.circuit_policy.failure_threshold:
             state.circuit_open = True
             state.opened_at = self.clock()
-            state.cooldown_until = self.clock() + self.circuit_policy.cooldown_seconds
+            cooldown = self.circuit_policy.cooldown_seconds\n            if retry_after is not None:\n                cooldown = max(cooldown, retry_after)\n            state.cooldown_until = self.clock() + cooldown
         self._persist(provider_name)
 
     def _record_success(self, provider_name: str) -> None:
