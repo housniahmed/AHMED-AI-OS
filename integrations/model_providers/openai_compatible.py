@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
-from core.models.providers import ModelProvider
+from core.models.providers import ModelProvider, ModelProviderError
 from core.models.router import ModelRoute, ModelRouter
 
 
@@ -18,7 +18,7 @@ class ModelProviderConfigurationError(ValueError):
     """Raised when external model provider configuration is incomplete."""
 
 
-class ModelProviderRequestError(RuntimeError):
+class ModelProviderRequestError(ModelProviderError):
     """Raised when the external provider cannot satisfy a model request."""
 
 
