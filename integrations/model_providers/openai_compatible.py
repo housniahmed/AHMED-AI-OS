@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
 from core.models.router import ModelRoute, ModelRouter
+from core.models.usage import InMemoryModelUsageStore, JsonFileModelUsageStore, ModelPricingCatalog
 
 
 class ModelProviderConfigurationError(ValueError):
@@ -175,6 +176,8 @@ def _settings_from_prefix(prefix: str) -> OpenAICompatibleSettings:
 def build_model_router_from_env() -> ModelRouter | None:
     """Build a single- or multi-provider router from environment configuration."""
     provider_ids = os.getenv("MODEL_PROVIDER_IDS", "").strip()
+    usage_store, pricing_catalog = _usage_configuration_from_env()
+
     if provider_ids:
         providers = {}
         routes = []
@@ -222,7 +225,12 @@ def build_model_router_from_env() -> ModelRouter | None:
 
         if not providers:
             raise ModelProviderConfigurationError("MODEL_PROVIDER_IDS contains no provider ids")
-        return ModelRouter(providers, tuple(routes))
+        return ModelRouter(
+            providers,
+            tuple(routes),
+            usage_store=usage_store,
+            pricing_catalog=pricing_catalog,
+        )
 
     configured = any(os.getenv(name, "").strip() for name in (
         "MODEL_PROVIDER_BASE_URL", "MODEL_PROVIDER_API_KEY", "MODEL_PROVIDER_MODEL"
@@ -236,4 +244,27 @@ def build_model_router_from_env() -> ModelRouter | None:
         ModelRoute(ModelTask.CHAT, provider.name, settings.default_model),
         ModelRoute(ModelTask.REASONING, provider.name, settings.default_model),
     )
-    return ModelRouter({provider.name: provider}, routes)
+    return ModelRouter(
+        {provider.name: provider},
+        routes,
+        usage_store=usage_store,
+        pricing_catalog=pricing_catalog,
+    )
+
+
+def _usage_configuration_from_env():
+    """Build optional durable usage storage and vendor-neutral pricing configuration."""
+    usage_path = os.getenv("MODEL_USAGE_STORE_PATH", "").strip()
+    usage_store = (
+        JsonFileModelUsageStore(usage_path)
+        if usage_path
+        else InMemoryModelUsageStore()
+    )
+
+    pricing_raw = os.getenv("MODEL_PRICING_JSON", "").strip()
+    pricing_catalog = (
+        ModelPricingCatalog.from_json(pricing_raw)
+        if pricing_raw
+        else ModelPricingCatalog()
+    )
+    return usage_store, pricing_catalog
