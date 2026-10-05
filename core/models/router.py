@@ -7,6 +7,7 @@ from time import sleep, time
 from typing import Callable
 from uuid import UUID, uuid4
 
+from core.models.adaptive import AdaptiveRoutingEngine, RoutingDecision
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
 from core.models.resilience import (
@@ -53,6 +54,7 @@ class ModelRouter:
         health_store: ProviderHealthStore | None = None,
         usage_store: ModelUsageStore | None = None,
         pricing_catalog: ModelPricingCatalog | None = None,
+        adaptive_engine: AdaptiveRoutingEngine | None = None,
         clock: Callable[[], float] = time,
         sleeper: Callable[[float], None] = sleep,
     ) -> None:
@@ -63,7 +65,9 @@ class ModelRouter:
         self.health_store = health_store or InMemoryProviderHealthStore()
         self.usage_store = usage_store or InMemoryModelUsageStore()
         self.pricing_catalog = pricing_catalog or ModelPricingCatalog()
+        self.adaptive_engine = adaptive_engine
         self.clock = clock
+        self._last_routing_decision: RoutingDecision | None = None
         self.sleeper = sleeper
         self._states = {}
         for name in self.providers:
@@ -124,7 +128,12 @@ class ModelRouter:
         candidates = self._candidates(request)
         if not candidates:
             raise LookupError(f"no model route for task={request.task.value}")
-        return candidates[0]
+        ranked = self._rank_candidates(request, candidates)
+        return ranked[0]
+
+    def last_routing_decision(self) -> RoutingDecision | None:
+        """Return the most recent adaptive decision, when adaptive routing is enabled."""
+        return self._last_routing_decision
 
     def usage_records(self) -> tuple[ModelUsageRecord, ...]:
         """Return all recorded provider attempts."""
@@ -152,7 +161,19 @@ class ModelRouter:
         ]
         if request.model:
             candidates = [r for r in candidates if r.model == request.model]
-        return sorted(candidates, key=lambda r: r.priority, reverse=True)
+        return candidates
+
+    def _rank_candidates(self, request: ModelRequest, candidates: list[ModelRoute]) -> list[ModelRoute]:
+        if self.adaptive_engine is None:
+            return sorted(candidates, key=lambda r: r.priority, reverse=True)
+        decision = self.adaptive_engine.choose(
+            candidates,
+            states=self._states,
+            usage_records=self.usage_store.records(),
+            task=request.task,
+        )
+        self._last_routing_decision = decision
+        return [item.route for item in decision.ranked]
 
     def _eligible(self, provider_name: str) -> bool:
         state = self._states[provider_name]
@@ -173,6 +194,7 @@ class ModelRouter:
         candidates = self._candidates(request)
         if not candidates:
             raise LookupError(f"no model route for task={request.task.value}")
+        candidates = self._rank_candidates(request, candidates)
 
         request_id = uuid4()
         errors: list[str] = []
