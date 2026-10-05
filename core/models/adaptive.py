@@ -29,6 +29,8 @@ class AdaptiveRoutingPolicy:
     max_cost_usd_per_attempt: float | None = None
     default_quality: float = 0.5
     unknown_cost_score: float = 0.5
+    latency_score_scale_ms: float = 1000.0
+    cost_score_scale_usd: float = 0.01
 
     def __post_init__(self) -> None:
         weights = (
@@ -45,6 +47,10 @@ class AdaptiveRoutingPolicy:
             raise ValueError("default_quality must be between 0 and 1")
         if not 0 <= self.unknown_cost_score <= 1:
             raise ValueError("unknown_cost_score must be between 0 and 1")
+        if self.latency_score_scale_ms <= 0:
+            raise ValueError("latency_score_scale_ms must be > 0")
+        if self.cost_score_scale_usd <= 0:
+            raise ValueError("cost_score_scale_usd must be > 0")
         if self.min_reliability is not None and not 0 <= self.min_reliability <= 1:
             raise ValueError("min_reliability must be between 0 and 1")
         if self.max_latency_ms is not None and self.max_latency_ms <= 0:
@@ -128,6 +134,7 @@ class RouteScore:
 class RoutingDecision:
     selected: ModelRoute
     ranked: tuple[RouteScore, ...]
+    excluded: tuple[RouteScore, ...]
     policy: AdaptiveRoutingPolicy
     reason: str
 
@@ -167,6 +174,7 @@ class AdaptiveRoutingEngine:
             for route in routes
         ]
         eligible = [item for item in scored if item.eligible]
+        excluded = tuple(item for item in scored if not item.eligible)
         if not eligible:
             raise LookupError(
                 f"no route satisfies adaptive policy for task={task.value}"
@@ -194,6 +202,7 @@ class AdaptiveRoutingEngine:
         return RoutingDecision(
             selected=selected,
             ranked=ranked,
+            excluded=excluded,
             policy=self.policy,
             reason=reason,
         )
@@ -216,7 +225,7 @@ class AdaptiveRoutingEngine:
 
         average_latency = usage.average_latency_ms if usage.attempts else None
         latency = (
-            1.0 / (1.0 + average_latency / 1000.0)
+            1.0 / (1.0 + average_latency / self.policy.latency_score_scale_ms)
             if average_latency is not None
             else 0.5
         )
@@ -232,7 +241,7 @@ class AdaptiveRoutingEngine:
             else None
         )
         cost = (
-            1.0 / (1.0 + max(average_cost, 0.0) * 100.0)
+            1.0 / (1.0 + max(average_cost, 0.0) / self.policy.cost_score_scale_usd)
             if average_cost is not None
             else self.policy.unknown_cost_score
         )
