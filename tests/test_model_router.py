@@ -77,3 +77,61 @@ def test_router_can_manage_providers_and_routes():
     router.remove_provider("new")
     with pytest.raises(LookupError):
         router.route(ModelRequest(ModelTask.CHAT, input_text="hello"))
+
+
+def test_router_can_use_adaptive_policy_from_historical_runtime_data():
+    from core.models.adaptive import (
+        AdaptiveRoutingEngine,
+        AdaptiveRoutingPolicy,
+        InMemoryQualitySignalStore,
+        QualitySignal,
+    )
+    from core.models.resilience import InMemoryProviderHealthStore, ProviderHealthState
+    from core.models.usage import InMemoryModelUsageStore, ModelUsageRecord
+
+    fast = StaticModelProvider("fast", "fast result")
+    reliable = StaticModelProvider("reliable", "reliable result")
+    health = InMemoryProviderHealthStore()
+    health.save("fast", ProviderHealthState(successes=90, failures=10))
+    health.save("reliable", ProviderHealthState(successes=99, failures=1))
+
+    usage = InMemoryModelUsageStore()
+    usage.record(ModelUsageRecord(
+        provider="fast", model="fast-model", task=ModelTask.REASONING,
+        prompt_tokens=100, completion_tokens=50, total_tokens=150,
+        tokens_available=True, latency_ms=80, estimated_cost_usd=0.004,
+    ))
+    usage.record(ModelUsageRecord(
+        provider="reliable", model="reliable-model", task=ModelTask.REASONING,
+        prompt_tokens=100, completion_tokens=50, total_tokens=150,
+        tokens_available=True, latency_ms=300, estimated_cost_usd=0.001,
+    ))
+
+    quality = InMemoryQualitySignalStore()
+    quality.set(QualitySignal("fast", "fast-model", ModelTask.REASONING, 0.70))
+    quality.set(QualitySignal("reliable", "reliable-model", ModelTask.REASONING, 0.95))
+    adaptive = AdaptiveRoutingEngine(
+        AdaptiveRoutingPolicy(
+            reliability_weight=0.45,
+            latency_weight=0.15,
+            quality_weight=0.30,
+            cost_weight=0.10,
+        ),
+        quality,
+    )
+    router = ModelRouter(
+        {"fast": fast, "reliable": reliable},
+        (
+            ModelRoute(ModelTask.REASONING, "fast", "fast-model", 100),
+            ModelRoute(ModelTask.REASONING, "reliable", "reliable-model", 50),
+        ),
+        health_store=health,
+        usage_store=usage,
+        adaptive_engine=adaptive,
+    )
+
+    assert router.route(ModelRequest(ModelTask.REASONING, input_text="solve")).provider == "reliable"
+    decision = router.last_routing_decision()
+    assert decision is not None
+    assert decision.selected.provider == "reliable"
+    assert "quality" in decision.reason
