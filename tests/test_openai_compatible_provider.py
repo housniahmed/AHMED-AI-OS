@@ -80,3 +80,32 @@ def test_environment_factory_builds_multiple_providers(monkeypatch):
     assert set(router.providers) == {"primary", "backup"}
     assert router.route(ModelRequest(task=ModelTask.CHAT, input_text="hi")).provider == "primary"
     assert router.route(ModelRequest(task=ModelTask.REASONING, input_text="hi")).provider == "primary"
+
+
+def test_environment_factory_can_enable_adaptive_routing(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER_IDS", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_NAME", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_BASE_URL", "https://primary.example/v1")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_API_KEY", "primary-secret")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_MODEL", "primary-model")
+    monkeypatch.setenv("MODEL_ROUTING_MODE", "adaptive")
+    monkeypatch.setenv("MODEL_ROUTING_RELIABILITY_WEIGHT", "0.5")
+    monkeypatch.setenv("MODEL_ROUTING_LATENCY_WEIGHT", "0.2")
+    monkeypatch.setenv("MODEL_ROUTING_QUALITY_WEIGHT", "0.2")
+    monkeypatch.setenv("MODEL_ROUTING_COST_WEIGHT", "0.1")
+
+    router = build_model_router_from_env()
+    assert router is not None
+    assert router.adaptive_engine is not None
+    assert router.adaptive_engine.policy.reliability_weight == 0.5
+
+
+def test_environment_factory_rejects_unknown_routing_mode(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER_IDS", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_NAME", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_BASE_URL", "https://primary.example/v1")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_API_KEY", "primary-secret")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_MODEL", "primary-model")
+    monkeypatch.setenv("MODEL_ROUTING_MODE", "unknown")
+    with pytest.raises(ModelProviderConfigurationError):
+        build_model_router_from_env()
