@@ -107,3 +107,26 @@ def test_cost_and_latency_are_used_from_b40_usage():
     assert score.average_cost_usd == 0.001
     assert 0 < score.latency < 1
     assert 0 < score.cost < 1
+
+
+def test_policy_reports_excluded_routes():
+    routes = [
+        ModelRoute(ModelTask.CHAT, "slow", "slow-model", 100),
+        ModelRoute(ModelTask.CHAT, "fast", "fast-model", 10),
+    ]
+    usage = [
+        _usage("slow", "slow-model", 2000, 0.001),
+        _usage("fast", "fast-model", 100, 0.001),
+    ]
+    decision = AdaptiveRoutingEngine(
+        AdaptiveRoutingPolicy(max_latency_ms=500)
+    ).choose(
+        routes,
+        states={"slow": _state(successes=10), "fast": _state(successes=10)},
+        usage_records=usage,
+        task=ModelTask.CHAT,
+    )
+    assert decision.selected.provider == "fast"
+    assert len(decision.excluded) == 1
+    assert decision.excluded[0].route.provider == "slow"
+    assert "latency" in (decision.excluded[0].exclusion_reason or "")
