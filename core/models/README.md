@@ -15,7 +15,7 @@ For every eligible route, B41 computes four normalized dimensions:
 - **Quality**: explicit `QualitySignal` supplied by an evaluator; missing quality uses a declared prior and is marked unobserved.
 - **Cost**: derived from B40 estimated priced attempt cost; missing pricing uses a declared neutral score.
 
-The final score is the weighted sum of the four dimensions. Model route priority remains only a deterministic tie-breaker after the adaptive score.
+The final score is the weighted sum of the four dimensions. Latency and cost scores use explicit policy scales, defaulting to 1000 ms and USD 0.01 respectively. Model route priority remains only a deterministic tie-breaker after the adaptive score.
 
 ### Hard constraints
 
