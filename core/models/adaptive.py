@@ -7,11 +7,13 @@ explainable routing decision. It never executes tools or changes governance.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from core.models.contracts import ModelTask
-from core.models.router import ModelRoute, ProviderRuntimeState
 from core.models.usage import ModelUsageAggregate, summarize_usage
+
+if TYPE_CHECKING:
+    from core.models.router import ModelRoute, ProviderRuntimeState
 
 
 @dataclass(frozen=True, slots=True)
