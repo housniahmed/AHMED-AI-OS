@@ -309,5 +309,7 @@ def _adaptive_configuration_from_env() -> AdaptiveRoutingEngine | None:
         max_cost_usd_per_attempt=optional_float("MODEL_ROUTING_MAX_COST_USD_PER_ATTEMPT"),
         default_quality=float_value("MODEL_ROUTING_DEFAULT_QUALITY", 0.5),
         unknown_cost_score=float_value("MODEL_ROUTING_UNKNOWN_COST_SCORE", 0.5),
+        latency_score_scale_ms=float_value("MODEL_ROUTING_LATENCY_SCORE_SCALE_MS", 1000.0),
+        cost_score_scale_usd=float_value("MODEL_ROUTING_COST_SCORE_SCALE_USD", 0.01),
     )
     return AdaptiveRoutingEngine(policy=policy)
