@@ -9,6 +9,7 @@ from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from core.models.adaptive import AdaptiveRoutingEngine, AdaptiveRoutingPolicy
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
 from core.models.router import ModelRoute, ModelRouter
@@ -177,6 +178,7 @@ def build_model_router_from_env() -> ModelRouter | None:
     """Build a single- or multi-provider router from environment configuration."""
     provider_ids = os.getenv("MODEL_PROVIDER_IDS", "").strip()
     usage_store, pricing_catalog = _usage_configuration_from_env()
+    adaptive_engine = _adaptive_configuration_from_env()
 
     if provider_ids:
         providers = {}
@@ -230,6 +232,7 @@ def build_model_router_from_env() -> ModelRouter | None:
             tuple(routes),
             usage_store=usage_store,
             pricing_catalog=pricing_catalog,
+            adaptive_engine=adaptive_engine,
         )
 
     configured = any(os.getenv(name, "").strip() for name in (
@@ -249,6 +252,7 @@ def build_model_router_from_env() -> ModelRouter | None:
         routes,
         usage_store=usage_store,
         pricing_catalog=pricing_catalog,
+        adaptive_engine=adaptive_engine,
     )
 
 
@@ -268,3 +272,42 @@ def _usage_configuration_from_env():
         else ModelPricingCatalog()
     )
     return usage_store, pricing_catalog
+
+
+def _adaptive_configuration_from_env() -> AdaptiveRoutingEngine | None:
+    """Build an explicit adaptive routing policy from environment configuration."""
+    mode = os.getenv("MODEL_ROUTING_MODE", "priority").strip().lower()
+    if mode in {"", "priority"}:
+        return None
+    if mode != "adaptive":
+        raise ModelProviderConfigurationError(
+            "MODEL_ROUTING_MODE must be 'priority' or 'adaptive'"
+        )
+
+    def float_value(name: str, default: float) -> float:
+        raw = os.getenv(name, str(default)).strip()
+        try:
+            return float(raw)
+        except ValueError as exc:
+            raise ModelProviderConfigurationError(
+                f"{name} must be numeric"
+            ) from exc
+
+    def optional_float(name: str) -> float | None:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return None
+        return float_value(name, 0.0)
+
+    policy = AdaptiveRoutingPolicy(
+        reliability_weight=float_value("MODEL_ROUTING_RELIABILITY_WEIGHT", 0.35),
+        latency_weight=float_value("MODEL_ROUTING_LATENCY_WEIGHT", 0.25),
+        quality_weight=float_value("MODEL_ROUTING_QUALITY_WEIGHT", 0.25),
+        cost_weight=float_value("MODEL_ROUTING_COST_WEIGHT", 0.15),
+        min_reliability=optional_float("MODEL_ROUTING_MIN_RELIABILITY"),
+        max_latency_ms=optional_float("MODEL_ROUTING_MAX_LATENCY_MS"),
+        max_cost_usd_per_attempt=optional_float("MODEL_ROUTING_MAX_COST_USD_PER_ATTEMPT"),
+        default_quality=float_value("MODEL_ROUTING_DEFAULT_QUALITY", 0.5),
+        unknown_cost_score=float_value("MODEL_ROUTING_UNKNOWN_COST_SCORE", 0.5),
+    )
+    return AdaptiveRoutingEngine(policy=policy)
