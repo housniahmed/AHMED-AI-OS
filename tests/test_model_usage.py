@@ -4,6 +4,7 @@ from uuid import UUID
 
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider
+from core.models.resilience import RetryPolicy
 from core.models.router import ModelRoute, ModelRouter
 from core.models.usage import (
     InMemoryModelUsageStore,
