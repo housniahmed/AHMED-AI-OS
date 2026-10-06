@@ -14,3 +14,13 @@ def test_failure_and_error_are_distinguished():
     assert run.results[0].status is EvaluationStatus.FAILED
     run2=fw.run([EvaluationCase("err","x")],lambda c: (_ for _ in ()).throw(RuntimeError("boom")))
     assert run2.results[0].status is EvaluationStatus.ERROR
+
+def test_evaluation_propagates_case_metadata():
+    metric=CallableMetric("quality",lambda case,out:1.0)
+    fw=EvaluationFramework(DeterministicEvaluator([metric]))
+    run=fw.run(
+        [EvaluationCase("model-case","x",metadata={"provider":"p","model":"m","task":"reasoning"})],
+        lambda c:"ok",
+    )
+    assert run.results[0].metadata["provider"] == "p"
+    assert run.results[0].metadata["task"] == "reasoning"
