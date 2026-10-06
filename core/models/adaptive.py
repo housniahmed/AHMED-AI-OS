@@ -81,7 +81,9 @@ class QualitySignal:
     task: ModelTask
     score: float
     sample_size: int = 1
+    confidence: float = 1.0
     source: str = "external_evaluator"
+    model_family: str | None = None
 
     def __post_init__(self) -> None:
         if not self.provider or not self.model:
@@ -90,28 +92,43 @@ class QualitySignal:
             raise ValueError("quality score must be between 0 and 1")
         if self.sample_size < 1:
             raise ValueError("quality sample_size must be >= 1")
+        if not 0 <= self.confidence <= 1:
+            raise ValueError("quality confidence must be between 0 and 1")
+        if self.model_family is not None and not self.model_family.strip():
+            raise ValueError("quality model_family must not be blank")
 
 
 class QualitySignalStore(Protocol):
-    def get(self, provider: str, model: str, task: ModelTask) -> QualitySignal | None: ...
+    def get(
+        self,
+        provider: str,
+        model: str,
+        task: ModelTask,
+        model_family: str | None = None,
+    ) -> QualitySignal | None: ...
 
     def set(self, signal: QualitySignal) -> None: ...
 
 
 class InMemoryQualitySignalStore(QualitySignalStore):
     def __init__(self) -> None:
-        self._signals: dict[tuple[str, str, ModelTask], QualitySignal] = {}
+        self._signals: dict[tuple[str, str, ModelTask, str | None], QualitySignal] = {}
 
-    def get(self, provider: str, model: str, task: ModelTask) -> QualitySignal | None:
-        return (
-            self._signals.get((provider, model, task))
-            or self._signals.get((provider, "*", task))
-            or self._signals.get(("*", model, task))
-            or self._signals.get(("*", "*", task))
+    def get(self, provider: str, model: str, task: ModelTask, model_family: str | None = None) -> QualitySignal | None:
+        direct = self._signals.get((provider, model, task))
+        if direct is not None:
+            return direct
+        candidates = (
+            self._signals.get((provider, "*", task, model_family)),
+            self._signals.get(("*", "*", task, model_family)),
+            self._signals.get((provider, "*", task, None)),
+            self._signals.get(("*", model, task)),
+            self._signals.get(("*", "*", task)),
         )
+        return next((signal for signal in candidates if signal is not None), None)
 
     def set(self, signal: QualitySignal) -> None:
-        self._signals[(signal.provider, signal.model, signal.task)] = signal
+        self._signals[(signal.provider, signal.model, signal.task, signal.model_family)] = signal
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +143,8 @@ class RouteScore:
     average_latency_ms: float | None
     average_cost_usd: float | None
     quality_observed: bool
+    quality_confidence: float
+    quality_source: str | None
     eligible: bool
     exclusion_reason: str | None = None
 
@@ -207,6 +226,11 @@ class AdaptiveRoutingEngine:
             reason=reason,
         )
 
+    @staticmethod
+    def _model_family(model: str) -> str | None:
+        prefix = model.lower().split("-", 1)[0].split("_", 1)[0].split("/", 1)[0]
+        return prefix or None
+
     def score(
         self,
         route: ModelRoute,
@@ -230,9 +254,20 @@ class AdaptiveRoutingEngine:
             else 0.5
         )
 
-        signal = self.quality_store.get(route.provider, route.model, task)
+        model_family = self._model_family(route.model)
+        signal = self.quality_store.get(
+            route.provider,
+            route.model,
+            task,
+            model_family=model_family,
+        )
         quality_observed = signal is not None
-        quality = signal.score if signal is not None else self.policy.default_quality
+        confidence = signal.confidence if signal is not None else 0.0
+        raw_quality = signal.score if signal is not None else self.policy.default_quality
+        quality = (
+            self.policy.default_quality
+            + confidence * (raw_quality - self.policy.default_quality)
+        )
 
         priced_attempts = usage.priced_attempts
         average_cost = (
@@ -287,6 +322,8 @@ class AdaptiveRoutingEngine:
             average_latency_ms=average_latency,
             average_cost_usd=average_cost,
             quality_observed=quality_observed,
+            quality_confidence=confidence,
+            quality_source=signal.source if signal is not None else None,
             eligible=exclusion_reason is None,
             exclusion_reason=exclusion_reason,
         )
