@@ -116,10 +116,27 @@ class QualityFeedbackEngine:
                 task = ModelTask(task_raw)
             except ValueError:
                 continue
-            scores = [metric.score for metric in result.metrics]
+            scores = [
+                (metric.name, metric.score)
+                for metric in result.metrics
+                if metric.name
+            ]
             if not scores:
                 continue
-            metric_score = sum(scores) / len(scores)
+            weights = self.policy.metric_weights
+            if weights:
+                weighted = [
+                    (score, weights.get(name, 0.0))
+                    for name, score in scores
+                ]
+                denominator = sum(weight for _, weight in weighted)
+                metric_score = (
+                    sum(score * weight for score, weight in weighted) / denominator
+                    if denominator > 0
+                    else sum(score for score, _ in scores) / len(scores)
+                )
+            else:
+                metric_score = sum(score for _, score in scores) / len(scores)
             groups.setdefault((provider, model, task), []).append(
                 (metric_score, result.status is EvaluationStatus.PASSED)
             )
@@ -198,3 +215,9 @@ class QualityFeedbackEngine:
         signal = self.to_quality_signal(profile)
         quality_store.set(signal)
         return signal
+
+    def refresh_signal(self, provider: str, model: str, task: ModelTask, quality_store) -> QualitySignal | None:
+        profile = self.profile(provider, model, task)
+        if profile is None:
+            return None
+        return self.update_quality_store(profile, quality_store)
