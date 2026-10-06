@@ -115,7 +115,7 @@ class InMemoryQualitySignalStore(QualitySignalStore):
         self._signals: dict[tuple[str, str, ModelTask, str | None], QualitySignal] = {}
 
     def get(self, provider: str, model: str, task: ModelTask, model_family: str | None = None) -> QualitySignal | None:
-        direct = self._signals.get((provider, model, task))
+        direct = self._signals.get((provider, model, task, None))
         if direct is not None:
             return direct
         candidates = (
