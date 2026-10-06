@@ -102,7 +102,7 @@ class QualityFeedbackEngine:
                 continue
             # Provider/model/task are supplied by the evaluation case metadata.
             # EvaluationRun intentionally stays provider-neutral.
-            metadata = getattr(result, "metadata", None) or {}
+            metadata = result.metadata
             if not metadata:
                 # Backward-compatible path: output may carry metadata only when a
                 # runner explicitly returns it. Never infer a model identity.
