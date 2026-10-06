@@ -19,14 +19,14 @@ class DeterministicEvaluator:
     def evaluate(self,case,output,*,duration_ms=None):
         results=tuple(m.score(case,output) for m in self.metrics)
         status=EvaluationStatus.PASSED if all(x.passed for x in results) else EvaluationStatus.FAILED
-        return EvaluationResult(case.id,status,results,output,duration_ms=duration_ms)
+        return EvaluationResult(case.id,status,results,output,duration_ms=duration_ms,metadata=dict(case.metadata))
 class EvaluationFramework:
     def __init__(self,evaluator:DeterministicEvaluator): self.evaluator=evaluator
     def run(self,cases:Iterable[EvaluationCase],runner:Callable[[EvaluationCase],Any])->EvaluationRun:
         run=EvaluationRun(); results=[]
         for case in cases:
             try: results.append(self.evaluator.evaluate(case,runner(case)))
-            except Exception as exc: results.append(EvaluationResult(case.id,EvaluationStatus.ERROR,error=str(exc)))
+            except Exception as exc: results.append(EvaluationResult(case.id,EvaluationStatus.ERROR,error=str(exc),metadata=dict(case.metadata)))
         return EvaluationRun(id=run.id,started_at=run.started_at,results=tuple(results))
     @staticmethod
     def summary(run):
