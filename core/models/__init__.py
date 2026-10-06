@@ -1,41 +1,13 @@
-"""Model routing package."""
+"""Model routing, quality, and usage package."""
 
 from core.models.adaptive import (
     AdaptiveRoutingEngine,
-    QualityFeedbackEngine,
-    QualityFeedbackPolicy,
-    QualityObservation,
-    QualityProfile,
-    InMemoryQualityObservationStore,
     AdaptiveRoutingPolicy,
     InMemoryQualitySignalStore,
     QualitySignal,
     RoutingDecision,
 )
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
-from core.models.router import ModelRoute, ModelRouter
-from core.models.usage import ModelPricing, ModelPricingCatalog
-
-__all__ = [
-    "AdaptiveRoutingEngine",
-    "QualityFeedbackEngine",
-    "QualityFeedbackPolicy",
-    "QualityObservation",
-    "QualityProfile",
-    "InMemoryQualityObservationStore",
-    "AdaptiveRoutingPolicy",
-    "InMemoryQualitySignalStore",
-    "QualitySignal",
-    "RoutingDecision",
-    "ModelRequest",
-    "ModelResponse",
-    "ModelTask",
-    "ModelRoute",
-    "ModelRouter",
-    "ModelPricing",
-    "ModelPricingCatalog",
-]
-
 from core.models.quality import (
     InMemoryQualityObservationStore,
     InMemoryQualityProfileStore,
@@ -45,12 +17,27 @@ from core.models.quality import (
     ModelQualityIntelligence,
     QualityLearningPolicy,
     QualityObservation,
-    QualityProfile,
     QualityObservationStore,
+    QualityProfile,
     QualityProfileStore,
 )
+from core.models.router import ModelRoute, ModelRouter
+from core.models.usage import (
+    ModelPricing,
+    ModelPricingCatalog,
+    ModelUsageAggregate,
+    ModelUsageRecord,
+)
 
-__all__ += [
+__all__ = [
+    "AdaptiveRoutingEngine",
+    "AdaptiveRoutingPolicy",
+    "InMemoryQualitySignalStore",
+    "QualitySignal",
+    "RoutingDecision",
+    "ModelRequest",
+    "ModelResponse",
+    "ModelTask",
     "InMemoryQualityObservationStore",
     "InMemoryQualityProfileStore",
     "JsonFileQualityProfileStore",
@@ -59,7 +46,13 @@ __all__ += [
     "ModelQualityIntelligence",
     "QualityLearningPolicy",
     "QualityObservation",
-    "QualityProfile",
     "QualityObservationStore",
+    "QualityProfile",
     "QualityProfileStore",
+    "ModelRoute",
+    "ModelRouter",
+    "ModelPricing",
+    "ModelPricingCatalog",
+    "ModelUsageAggregate",
+    "ModelUsageRecord",
 ]
