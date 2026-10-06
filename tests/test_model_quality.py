@@ -69,3 +69,24 @@ def test_profile_can_become_b41_quality_signal():
     assert signal.score == 0.88
     assert signal.sample_size == 20
     assert signal.source == "b42_evaluation"
+
+def test_evaluation_run_becomes_quality_observation():
+    engine = QualityFeedbackEngine()
+    run = EvaluationRun(results=(
+        EvaluationResult(
+            case_id=uuid4(),
+            status=EvaluationStatus.PASSED,
+            metrics=(MetricResult("quality", 0.9, True),),
+            metadata={"provider":"p","model":"m","task":"reasoning"},
+        ),
+        EvaluationResult(
+            case_id=uuid4(),
+            status=EvaluationStatus.FAILED,
+            metrics=(MetricResult("quality", 0.5, False),),
+            metadata={"provider":"p","model":"m","task":"reasoning"},
+        ),
+    ))
+    observations = engine.ingest_run(run)
+    assert len(observations) == 1
+    assert observations[0].score == 0.7
+    assert observations[0].pass_rate == 0.5
