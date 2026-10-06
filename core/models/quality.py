@@ -95,6 +95,8 @@ class QualityProfile:
     confidence: float
     sample_size: int
     pass_rate: float
+    passed_evaluations: int
+    failed_evaluations: int
     trend: float
     last_observed_score: float
     last_observed_at: datetime
@@ -108,6 +110,8 @@ class QualityProfile:
             raise ValueError("profile sample_size must be >= 1")
         if not 0 <= self.pass_rate <= 1:
             raise ValueError("profile pass_rate must be between 0 and 1")
+        if self.passed_evaluations < 0 or self.failed_evaluations < 0:
+            raise ValueError("evaluation counts must be >= 0")
 
 
 class QualityProfileStore(Protocol):
@@ -364,6 +368,8 @@ class ModelQualityIntelligence:
                 confidence=min(1.0, sample_size / self.policy.confidence_full_at),
                 sample_size=sample_size,
                 pass_rate=passed / sample_size,
+                passed_evaluations=passed,
+                failed_evaluations=failed,
                 trend=trend if previous is None else self.policy.alpha * trend + (1 - self.policy.alpha) * prior_trend,
                 last_observed_score=observation.score,
                 last_observed_at=observation.observed_at,
@@ -411,6 +417,8 @@ class LearnedQualitySignalStore:
                 confidence=getattr(signal, "confidence", 1.0),
                 sample_size=max(signal.sample_size, 1),
                 pass_rate=signal.score,
+                passed_evaluations=0,
+                failed_evaluations=0,
                 trend=0.0,
                 last_observed_score=signal.score,
                 last_observed_at=utc_now(),
