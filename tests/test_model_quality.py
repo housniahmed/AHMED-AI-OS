@@ -171,3 +171,30 @@ def test_family_resolver_prefers_explicit_metadata():
         model="unknown-model",
         metadata={},
     ) is None
+
+
+def test_family_quality_can_help_an_unseen_model_in_b41():
+    intelligence = ModelQualityIntelligence(
+        policy=QualityLearningPolicy(alpha=1.0)
+    )
+    intelligence.ingest_run(EvaluationRun(results=(
+        _result(0.95, model="gpt-one"),
+    )))
+    route = __import__("core.models.router", fromlist=["ModelRoute"]).ModelRoute(
+        ModelTask.REASONING, "provider-a", "gpt-two"
+    )
+    state = __import__(
+        "core.models.resilience", fromlist=["ProviderHealthState"]
+    ).ProviderHealthState(successes=10)
+    usage = __import__(
+        "core.models.usage", fromlist=["summarize_usage"]
+    ).summarize_usage([])
+    score = AdaptiveRoutingEngine(quality_store=intelligence).score(
+        route,
+        state=state,
+        usage=usage,
+        task=ModelTask.REASONING,
+    )
+    assert score.quality_observed is True
+    assert score.quality_source == "b42_evaluation"
+    assert score.quality > 0.5
