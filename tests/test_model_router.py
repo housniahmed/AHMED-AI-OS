@@ -1,7 +1,7 @@
 import pytest
 
 from core.models.contracts import ModelRequest, ModelTask
-from core.models.providers import StaticModelProvider
+from core.models.providers import ModelProvider, StaticModelProvider
 from core.models.router import ModelRoute, ModelRouter
 
 
