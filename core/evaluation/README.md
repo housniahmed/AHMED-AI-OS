@@ -28,3 +28,16 @@ Metrics are injectable and normalized to [0,1]. Thresholds are explicit. A passi
 
 ## Current scope
 The implementation is provider-neutral and deterministic when injected metrics/runners are deterministic. Dataset management, LLM-as-a-judge adapters, regression suites, statistical analysis, experiment tracking and CI gates are future extensions.
+
+
+## B42 Feedback Integration
+
+B42 consumes `EvaluationRun` objects from this framework through `ModelQualityIntelligence.ingest_run()`.
+
+For best attribution, evaluation cases should include:
+
+`provider`, `model`, `task`, and optionally `model_family` in `EvaluationCase.metadata`.
+
+The learned result is exposed as a `QualitySignal` compatible with B41. Quality is bounded to [0,1], confidence is explicit, and missing model identity or metrics produces no quality signal.
+
+B42 supports exact-model and family-level learning and optional durable profiles through its JSON profile store. It does not turn evaluation status alone into a quality score.
