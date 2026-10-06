@@ -21,7 +21,7 @@ class MetricResult:
         if self.threshold is not None and not 0<=self.threshold<=1: raise ValueError("Metric threshold must be between 0 and 1.")
 @dataclass(frozen=True,slots=True)
 class EvaluationResult:
-    case_id:UUID; status:EvaluationStatus; metrics:tuple[MetricResult,...]=(); output:Any=None; error:str|None=None; duration_ms:float|None=None
+    case_id:UUID; status:EvaluationStatus; metrics:tuple[MetricResult,...]=(); output:Any=None; error:str|None=None; duration_ms:float|None=None; metadata:dict[str,Any]=field(default_factory=dict)
 @dataclass(frozen=True,slots=True)
 class EvaluationRun:
     id:UUID=field(default_factory=uuid4); started_at:datetime=field(default_factory=utc_now); results:tuple[EvaluationResult,...]=()
