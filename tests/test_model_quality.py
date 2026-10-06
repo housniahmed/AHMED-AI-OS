@@ -18,7 +18,8 @@ def _run(score: float, passed: bool):
         case_id=result.case_id,
         status=result.status,
         metrics=result.metrics,
-        output={"provider": "p", "model": "m", "task": "reasoning"},
+        output={"answer": "ok"},
+        metadata={"provider": "p", "model": "m", "task": "reasoning"},
     )
     return EvaluationRun(results=(result_with_metadata,))
 
