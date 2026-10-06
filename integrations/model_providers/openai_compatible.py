@@ -10,6 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from core.models.adaptive import AdaptiveRoutingEngine, AdaptiveRoutingPolicy
+from core.models.quality import JsonFileQualityProfileStore, ModelQualityIntelligence, QualityLearningPolicy
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
 from core.models.router import ModelRoute, ModelRouter
@@ -312,4 +313,22 @@ def _adaptive_configuration_from_env() -> AdaptiveRoutingEngine | None:
         latency_score_scale_ms=float_value("MODEL_ROUTING_LATENCY_SCORE_SCALE_MS", 1000.0),
         cost_score_scale_usd=float_value("MODEL_ROUTING_COST_SCORE_SCALE_USD", 0.01),
     )
-    return AdaptiveRoutingEngine(policy=policy)
+
+    quality_path = os.getenv("MODEL_QUALITY_STORE_PATH", "").strip()
+    profile_store = (
+        JsonFileQualityProfileStore(quality_path)
+        if quality_path
+        else None
+    )
+    quality_intelligence = ModelQualityIntelligence(
+        policy=QualityLearningPolicy(
+            alpha=float_value("MODEL_QUALITY_ALPHA", 0.25),
+            prior_score=float_value("MODEL_QUALITY_PRIOR_SCORE", 0.5),
+            confidence_full_at=int(float_value("MODEL_QUALITY_CONFIDENCE_FULL_AT", 5.0)),
+        ),
+        profile_store=profile_store,
+    )
+    return AdaptiveRoutingEngine(
+        policy=policy,
+        quality_store=quality_intelligence,
+    )
