@@ -1,60 +1,76 @@
 # B42 — Model Quality Intelligence & Evaluation Feedback Loop
 
-B42 turns B32 evaluation evidence into bounded, explicit quality intelligence consumed by B41.
+B42 turns B32 evaluation evidence into learned quality signals consumed by B41.
 
-## Flow
+## Feedback loop
 
-B32 Evaluation Case
-→ explicit provider/model/task metadata
-→ EvaluationResult
-→ QualityFeedbackEngine
-→ historical QualityObservation
-→ QualityProfile
-→ B41 QualitySignal
+`B32 EvaluationRun
+  → explicit provider/model/task metadata
+  → QualityObservation
+  → learned QualityProfile
+  → QualitySignal
+  → B41 AdaptiveRoutingEngine`
 
-## Identity boundary
+## Evidence rules
 
-Evaluation cases must explicitly declare:
+A result is eligible for learning only when:
 
-- provider
-- model
-- task
+- provider is explicit
+- model is explicit
+- task is a valid `ModelTask`
+- at least one `MetricResult` exists
 
-B42 never infers model identity from output text, provider success, latency, or cost.
+B42 never infers quality from HTTP success, latency, cost, or model availability.
 
-## Quality profile
+Metric scores are averaged by default or combined using configured metric weights.
 
-A profile contains:
+## Learning
 
-- quality score in [0, 1]
+Quality profiles use a bounded exponential moving average:
+
+`new = alpha × observation + (1-alpha) × previous`
+
+The first observation starts from an explicit prior score.
+
+B42 also tracks:
+
 - sample size
+- confidence
 - pass rate
-- trend versus the previous observation
-- confidence based on evidence volume
-- complete observation history
+- latest observed score
+- trend
+- metric-level evidence
 
-The score combines historical evidence with a configurable recency weight. This is an evaluation signal, not a probability that the model is truthful.
+## Model families
 
-## Metric weighting
+B42 learns:
 
-QualityFeedbackPolicy.metric_weights can weight evaluation metrics explicitly. If no weights are configured, metric scores are averaged.
+1. exact provider + model + task
+2. provider + model family + task
+3. model family + task across providers
 
-## Feedback boundary
+The preferred family identity is explicit `EvaluationCase.metadata["model_family"]`. A small declared prefix resolver is available for common families such as GPT, Claude, Gemini, Llama, Mistral and Qwen.
 
-refresh_signal() can update a B41 QualitySignalStore explicitly. B42 does not autonomously rewrite routing policy weights and does not enable/disable providers.
+## Persistence
 
-## Governance
+`JsonFileQualityProfileStore` provides single-process durable profiles. The store is intentionally provider-neutral so it can later be replaced by PostgreSQL/Redis.
 
-B42:
+## B41 integration
 
-- does not execute tools
-- does not approve actions
-- does not change security permissions
-- does not bypass B39 reliability constraints
-- does not bypass B18 governance
+`ModelQualityIntelligence` implements the B41 quality-store shape and can be passed directly to:
 
-B41 remains responsible for route arbitration; B42 only supplies quality evidence.
+`AdaptiveRoutingEngine(quality_store=intelligence)`
 
-## Future evolution
+Signals carry:
 
-A later brick may add statistically robust confidence intervals, evaluator drift detection, benchmark cohorts, and policy optimization. Those mechanisms should remain explicit and auditable.
+- score
+- sample size
+- confidence
+- source
+- model family
+
+B41 blends low-confidence observations with its declared quality prior, preventing a tiny evaluation sample from dominating routing.
+
+## Governance boundary
+
+B42 learns evidence only. It never executes tools, grants permissions, approves actions, bypasses B18/B33, or mutates routing weights autonomously.
