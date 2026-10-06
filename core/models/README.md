@@ -38,3 +38,33 @@ B41 only chooses a model route. It does not authorize tools, approve agent actio
 Set `MODEL_ROUTING_MODE=adaptive` to enable B41 through the environment-based provider factory. The four weights must not all be zero. The default values preserve a balanced reliability-first policy.
 
 B41 is intentionally deterministic. A future optimizer may use B32 evaluation results to tune policy weights, but no autonomous policy mutation is introduced here.
+
+## B42 — Model Quality Intelligence & Evaluation Feedback Loop
+
+B42 connects B32 evaluation evidence to B41 routing quality signals.
+
+Flow:
+
+`B32 EvaluationRun → QualityObservation → learned profile → QualitySignal → B41 AdaptiveRoutingEngine`
+
+Each evaluation result must explicitly identify `provider`, `model`, and `task` in its metadata. B42 will not infer these identities from output text or network behavior.
+
+Metric scores are combined using either configured metric weights or a simple mean. Evaluation pass/fail status is retained as evidence, but it is not used as a substitute for the metric score.
+
+Quality learning uses a bounded exponential moving average:
+
+`new_score = alpha × observation + (1-alpha) × previous_score`
+
+with an explicit prior for the first observation. Confidence increases with sample count until `MODEL_QUALITY_CONFIDENCE_FULL_AT`.
+
+B42 learns three useful levels:
+
+- exact provider + model + task
+- provider + model family + task
+- model family + task across providers
+
+Model family is preferably supplied as evaluation metadata. A small deterministic prefix resolver is available as a fallback for common family names.
+
+B41 consumes these signals with confidence-aware blending, so a small number of evaluations cannot dominate routing.
+
+B42 does not tune routing weights autonomously and does not authorize execution. It supplies learned quality evidence only. This preserves the separation between evaluation, policy, security, governance and execution.
