@@ -2,6 +2,11 @@
 
 from core.models.adaptive import (
     AdaptiveRoutingEngine,
+    QualityFeedbackEngine,
+    QualityFeedbackPolicy,
+    QualityObservation,
+    QualityProfile,
+    InMemoryQualityObservationStore,
     AdaptiveRoutingPolicy,
     InMemoryQualitySignalStore,
     QualitySignal,
@@ -13,6 +18,11 @@ from core.models.usage import ModelPricing, ModelPricingCatalog
 
 __all__ = [
     "AdaptiveRoutingEngine",
+    "QualityFeedbackEngine",
+    "QualityFeedbackPolicy",
+    "QualityObservation",
+    "QualityProfile",
+    "InMemoryQualityObservationStore",
     "AdaptiveRoutingPolicy",
     "InMemoryQualitySignalStore",
     "QualitySignal",
