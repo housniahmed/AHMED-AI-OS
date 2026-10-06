@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any,Callable,Iterable
 from .models import EvaluationCase,EvaluationResult,EvaluationRun,EvaluationStatus,MetricResult
 class EvaluationMetric(ABC):
-    name="metric"
     @abstractmethod
     def score(self,case:EvaluationCase,output:Any)->MetricResult: ...
 @dataclass(frozen=True,slots=True)
