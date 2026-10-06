@@ -264,7 +264,19 @@ class ModelQualityIntelligence:
         return tuple(observations)
 
     def profile(self, provider: str, model: str, task: ModelTask) -> QualityProfile | None:
-        return self.profile_store.get(provider, model, task, None)
+        exact = self.profile_store.get(provider, model, task, None)
+        if exact is not None:
+            return exact
+        return next(
+            (
+                item
+                for item in self.profile_store.all()
+                if item.provider == provider
+                and item.model == model
+                and item.task == task
+            ),
+            None,
+        )
 
     def family_profile(self, model_family: str, task: ModelTask, provider: str = "*") -> QualityProfile | None:
         model = "*"
@@ -286,6 +298,17 @@ class ModelQualityIntelligence:
             )
             for item in self.profile_store.all()
         )
+
+    def get(self, provider: str, model: str, task: ModelTask, model_family: str | None = None):
+        return self.signal_store().get(
+            provider,
+            model,
+            task,
+            model_family=model_family,
+        )
+
+    def set(self, signal) -> None:
+        self.signal_store().set(signal)
 
     def signal_store(self):
         return LearnedQualitySignalStore(
@@ -386,6 +409,17 @@ class LearnedQualitySignalStore:
 
     def get(self, provider: str, model: str, task: ModelTask, model_family: str | None = None):
         profile = self.profile_store.get(provider, model, task, None)
+        if profile is None:
+            profile = next(
+                (
+                    item
+                    for item in self.profile_store.all()
+                    if item.provider == provider
+                    and item.model == model
+                    and item.task == task
+                ),
+                None,
+            )
         if profile is None and model_family:
             profile = self.profile_store.get(provider, "*", task, model_family)
         if profile is None and model_family:
