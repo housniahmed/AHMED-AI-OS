@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.0",
     "uvicorn>=0.30",
     "pytest>=8.0",
+    "httpx2",
 ]
 
 [tool.pytest.ini_options]
