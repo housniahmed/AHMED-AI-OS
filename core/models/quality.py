@@ -187,6 +187,8 @@ class JsonFileQualityProfileStore(QualityProfileStore):
                         confidence=float(raw["confidence"]),
                         sample_size=int(raw["sample_size"]),
                         pass_rate=float(raw["pass_rate"]),
+                        passed_evaluations=int(raw.get("passed_evaluations", 0)),
+                        failed_evaluations=int(raw.get("failed_evaluations", 0)),
                         trend=float(raw["trend"]),
                         last_observed_score=float(raw["last_observed_score"]),
                         last_observed_at=datetime.fromisoformat(str(raw["last_observed_at"])),
@@ -379,8 +381,11 @@ class ModelQualityIntelligence:
         sample_size = previous_samples + 1
         passed = previous_passed + (observation.status is EvaluationStatus.PASSED)
         failed = previous_failed + (observation.status is EvaluationStatus.FAILED)
-        prior_trend = previous.trend if previous else 0.0
-        trend = observation.score - (previous.last_observed_score if previous else previous_score)
+        trend = (
+            observation.score - previous.last_observed_score
+            if previous is not None
+            else 0.0
+        )
         self.profile_store.save(
             QualityProfile(
                 provider=provider,
@@ -393,7 +398,7 @@ class ModelQualityIntelligence:
                 pass_rate=passed / sample_size,
                 passed_evaluations=passed,
                 failed_evaluations=failed,
-                trend=trend if previous is None else self.policy.alpha * trend + (1 - self.policy.alpha) * prior_trend,
+                trend=trend,
                 last_observed_score=observation.score,
                 last_observed_at=observation.observed_at,
             )
