@@ -122,8 +122,8 @@ class InMemoryQualitySignalStore(QualitySignalStore):
             self._signals.get((provider, "*", task, model_family)),
             self._signals.get(("*", "*", task, model_family)),
             self._signals.get((provider, "*", task, None)),
-            self._signals.get(("*", model, task)),
-            self._signals.get(("*", "*", task)),
+            self._signals.get(("*", model, task, None)),
+            self._signals.get(("*", "*", task, None)),
         )
         return next((signal for signal in candidates if signal is not None), None)
 
@@ -228,8 +228,12 @@ class AdaptiveRoutingEngine:
 
     @staticmethod
     def _model_family(model: str) -> str | None:
+        known = {
+            "gpt", "claude", "gemini", "llama", "mistral",
+            "qwen", "deepseek", "command", "phi", "gemma",
+        }
         prefix = model.lower().split("-", 1)[0].split("_", 1)[0].split("/", 1)[0]
-        return prefix or None
+        return prefix if prefix in known else None
 
     def score(
         self,
