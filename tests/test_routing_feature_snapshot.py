@@ -8,17 +8,25 @@ from core.models.usage import JsonFileModelUsageStore, ModelUsageRecord
 from scripts.build_routing_feature_snapshot import build_snapshot
 
 
-def _write_usage(path: Path, *, provider: str, model: str, priced: bool = True) -> None:
+def _write_usage(
+    path: Path,
+    *,
+    provider: str,
+    model: str,
+    priced: bool = True,
+    reported_model: str | None = None,
+) -> None:
     store = JsonFileModelUsageStore(path)
     for index, success in enumerate((True, True, False)):
         store.record(
             ModelUsageRecord(
                 task=ModelTask.REASONING,
                 provider=provider,
-                model=model,
+                model=reported_model or model,
                 latency_ms=(100.0 + index * 100.0),
                 success=success,
                 estimated_cost_usd=(0.001 if priced and success else None),
+                metadata={"requested_model": model},
             )
         )
 
@@ -55,7 +63,12 @@ def test_snapshot_uses_observed_usage_and_confidence_blended_exact_quality(tmp_p
     quality_path = tmp_path / "quality.json"
     health_path = tmp_path / "health.json"
 
-    _write_usage(usage_path, provider="provider-a", model="model-a")
+    _write_usage(
+        usage_path,
+        provider="provider-a",
+        model="model-a",
+        reported_model="model-a-serving-v2",
+    )
     _write_usage(usage_path, provider="provider-b", model="model-b")
     quality_store = JsonFileQualityProfileStore(quality_path)
     _profile(quality_store, provider="provider-a", model="model-a", score=0.9, confidence=0.8)
@@ -88,6 +101,7 @@ def test_snapshot_uses_observed_usage_and_confidence_blended_exact_quality(tmp_p
     assert first["quality_last_observed_at"] == "2026-01-01T00:00:00+00:00"
     assert first["evidence"]["usage_attempts"] == 3
     assert first["evidence"]["priced_attempts"] == 2
+    assert first["evidence"]["observed_response_models"] == ["model-a-serving-v2"]
 
 
 def test_snapshot_skips_incomplete_pricing_missing_quality_and_open_circuit(tmp_path):
