@@ -153,6 +153,7 @@ def build_snapshot(
             "quality": quality_score,
             "cost": cost_score,
             "priority": 0,
+            "quality_last_observed_at": profile.last_observed_at.isoformat(),
             "evidence": {
                 "usage_attempts": len(records),
                 "successful_attempts": successful,
@@ -165,12 +166,13 @@ def build_snapshot(
             },
         })
 
+    generated_at = datetime.now(timezone.utc).isoformat()
     if not features:
         # Emit diagnostics while ensuring the current proposal CLI does not
         # accidentally treat a missing evidence set as a neutral feature vector.
         return {
             "schema_version": 1,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": generated_at,
             "source": "explicit_b39_b40_b42_store_snapshot",
             "features": [],
             "included_model_tasks": 0,
@@ -186,7 +188,7 @@ def build_snapshot(
 
     return {
         "schema_version": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": generated_at,
         "source": "explicit_b39_b40_b42_store_snapshot",
         "features": features,
         "included_model_tasks": len(features),
