@@ -1,10 +1,34 @@
-# B43 — Benchmark-to-policy proposal runbook
+# B43 — Benchmark-to-policy runbook
 
-This runbook connects an actual B32 evaluation run to the B43 optimizer. It is an offline workflow; it does not invoke a model provider, invent observations, or activate the proposed policy.
+This runbook connects historical B39/B40/B42 evidence to a real paired B32 evaluation run, then creates an auditable B43 proposal. It does not activate policies.
 
-## 1. Execute and export a paired B32 benchmark
+## 1. Freeze historical routing features first
 
-First, prepare a dataset JSON file for the actual workflows you want to compare. The runner accepts a version 1 document with a `cases` array. Each case has a stable ID, task, prompt, scoring specification, and optional threshold. Example schema (replace this illustrative case with your own representative prompts and expected facts):
+The feature snapshot **must be generated before the benchmark run starts**. This keeps runtime evidence and B42 quality profiles independent of the outcomes being evaluated. The B43 proposal CLI enforces this using the snapshot timestamp, evaluation-run timestamp, and each exact B42 profile timestamp.
+
+First, make sure B40 usage telemetry exists for the models you want to compare, B42 has exact provider/model/task quality profiles based on prior evaluations, and pricing is configured for the relevant routes. Missing pricing or quality evidence is not replaced with a made-up value.
+
+From the repository root, generate a normalized snapshot:
+
+```bash
+python scripts/build_routing_feature_snapshot.py \
+  --usage-store data/model-usage.json \
+  --quality-store data/model-quality.json \
+  --health-store data/model-health.json \
+  --output artifacts/routing-features.json
+```
+
+Pass `--health-store` only when that B39 JSON file exists and contains the actual provider health state. The collector uses B40 observations for exact provider/model/task attempt reliability, latency, and estimated cost; it reads B42 exact-model quality profiles; and it excludes disabled or circuit-open providers when that state is available.
+
+By default, it requires at least three usage attempts and one B42 quality observation, and it requires every usage attempt for a model/task to have configured pricing. It computes higher-is-better normalized scores using explicit scales: latency score `1 / (1 + mean_latency_ms / 1000)`, cost score `1 / (1 + mean_estimated_cost_usd / 0.01)`, and confidence-blended B42 quality with prior 0.5. Adjust scales only when the routing policy's corresponding scales are changed or the experiment plan justifies the difference.
+
+The snapshot includes per-model evidence counts, cost/latency telemetry, B42 confidence and observation timestamp, skipped combinations/reasons, and a generation timestamp. If no valid features can be built, the collector writes diagnostics and exits with code 2. Check that at least two candidate model/task entries remain for each task in your intended benchmark.
+
+**Do not run this snapshot step after the benchmark and then use those features for the same evaluation run.** B42 profiles updated from the benchmark itself would leak outcomes into the feature set, and later B40 usage could reflect the evaluation calls.
+
+## 2. Prepare a representative benchmark dataset
+
+Create a version 1 JSON file such as `evals/my-benchmark.json`. Each case requires a stable ID, name, task, prompt, expected result specification, and optional threshold:
 
 ```json
 {
@@ -25,9 +49,16 @@ First, prepare a dataset JSON file for the actual workflows you want to compare.
 }
 ```
 
-The deterministic scorer supports `required_terms` (fraction of case-insensitive terms found), `exact_answer` (normalized exact match), and `json_fields` (fraction of expected JSON key/value pairs that match). These metrics are only appropriate when their definitions match the task; they are not a universal measure of model quality.
+The deterministic scorer supports three expectation kinds:
+- `required_terms`: fraction of declared terms found, case-insensitively;
+- `exact_answer`: normalized exact text match;
+- `json_fields`: fraction of expected JSON key/value pairs found in the generated JSON object.
 
-Configure at least two routes for every benchmark task using the existing `MODEL_PROVIDER_*` or `MODEL_PROVIDER_IDS` environment settings, then run:
+Use a scoring method that actually matches the task. These simple metrics are not universal measures of model quality. Populate the dataset with real representative tasks and correct expected results; do not copy the illustrative placeholders as empirical evidence.
+
+## 3. Execute a paired B32 benchmark
+
+Configure at least two provider/model routes for each task in your dataset using the existing `MODEL_PROVIDER_*` or `MODEL_PROVIDER_IDS` environment settings. Set API credentials through environment variables, not committed files. Then run:
 
 ```bash
 python scripts/run_model_routing_benchmark.py \
@@ -36,55 +67,15 @@ python scripts/run_model_routing_benchmark.py \
   --limit-per-task 10
 ```
 
-The default limit of 10 paired cases per task is a cost-conscious smoke run, not enough for default B43 promotion gates. With the current 20% deterministic validation split, plan roughly 100 paired cases per task to yield at least 20 validation samples and 20 training samples; use `--limit-per-task 100` only after preparing that dataset and confirming the expected provider cost. Every selected case is sent to each configured candidate route for its task. The runner saves actual outputs and attribution to the versioned B32 run format. Do not commit sensitive prompts or raw provider outputs to the repository.
+The default limit of 10 is a low-cost smoke run and normally does not satisfy B43 promotion gates. The default optimizer requires at least 20 training and 20 validation samples. Because the split is a stable hash-based 20% validation split, plan roughly 120 paired benchmark cases per task to give the validation set a buffer, then inspect the reported counts before considering a proposal. Each case is submitted once to each configured route for its task; provider retries may create additional billable attempts. Confirm your providers' current pricing before increasing the limit.
 
-The runner creates a B32 result per candidate/case pair and records these required attribution fields in each result: `provider`, `model`, `task`, and the shared `benchmark_case_id`. Metrics score observed behavior using the scoring criterion you declare for each case. A passing request or HTTP response is not a quality score, and different prompts must not share a group ID unless they represent the same evaluation case.
+The runner evaluates each candidate route independently instead of letting adaptive arbitration choose a winner. The resulting B32 run contains actual output and metrics with explicit `provider`, `model`, `task`, and shared `benchmark_case_id` attribution. The run is saved in a versioned JSON format by `core.evaluation.serialization.save_evaluation_run`.
 
-To export a run produced through the B32 API instead of the CLI, use:
+Do not commit sensitive prompts or raw provider outputs to the repository. The collector's feature snapshot must have been generated before this run; the proposal CLI rejects feature snapshots or quality observations dated on or after the run start.
 
-```python
-from core.evaluation.serialization import save_evaluation_run
+## 4. Generate B43 proposals
 
-save_evaluation_run(evaluation_run, "artifacts/evaluation-run.json")
-```
-
-The versioned JSON schema preserves run IDs, case IDs, metrics, evaluation status, duration, output, errors, and attribution metadata. Outputs and metadata must be JSON-compatible. Do not commit sensitive prompts or raw provider outputs to the repository.
-
-## 2. Prepare the feature snapshot
-
-Create a JSON file named, for example, `artifacts/routing-features.json`:
-
-```json
-{
-  "schema_version": 1,
-  "features": [
-    {
-      "provider": "REPLACE_WITH_OBSERVED_PROVIDER",
-      "model": "REPLACE_WITH_OBSERVED_MODEL",
-      "task": "reasoning",
-      "reliability": 0.0,
-      "latency": 0.0,
-      "quality": 0.0,
-      "cost": 0.0,
-      "priority": 0
-    }
-  ]
-}
-```
-
-The zero values above are schema placeholders, not benchmark measurements. Replace them with a snapshot derived from the actual B39/B40/B42 evidence before running an analysis. Include one row per exact provider/model/task identity represented in the evaluation run.
-
-All four features must be numeric and normalized to `[0, 1]`, with **higher meaning better**:
-- `reliability`: reliability estimate derived from B39 observations
-- `latency`: normalized latency/speed score derived from B40 latency observations (not raw milliseconds)
-- `quality`: confidence-aware quality score derived from B42 or another documented evaluator
-- `cost`: normalized cost-efficiency score derived from configured B40 pricing (not raw USD)
-
-Do not fill missing evidence with estimates that look observed. Missing feature rows are skipped, and unpaired groups cannot be used by the optimizer.
-
-## 3. Build proposals
-
-From the repository root, run:
+Use the same frozen snapshot generated in step 1:
 
 ```bash
 python scripts/propose_routing_policy.py \
@@ -93,24 +84,14 @@ python scripts/propose_routing_policy.py \
   --store-path data/model-routing-policies.json
 ```
 
-The command builds paired samples, reports skipped rows/groups and reasons, splits samples deterministically into training and held-out validation subsets, and persists one proposal per task with usable paired data. The dataset ID defaults to a SHA-256 fingerprint of both input files. The store also records the baseline revision, proposal state, and audit events.
+The command builds paired samples, reports skipped results/groups and reasons, deterministically separates training and held-out validation cases, and writes one proposal per task with usable paired data. The dataset ID defaults to a SHA-256 fingerprint of the evaluation-run and feature files.
 
-Defaults are 20 training samples, 20 validation samples, mean held-out uplift of at least 0.02, and a 1.96 confidence multiplier. For an exploratory run, thresholds can be changed with CLI flags; any relaxed thresholds must be justified in the evaluation plan and must not be used to misrepresent weak evidence as production-ready.
+Default statistical gates are 20 training samples, 20 validation samples, mean held-out uplift of at least 0.02, and a 1.96 confidence multiplier. A proposal may correctly remain `insufficient_evidence` when sample counts, uplift, or confidence gates do not pass. Exit code 2 means invalid input or no usable paired data; inspect the diagnostic output and skipped reasons.
 
-A proposal can have status `insufficient_evidence` even when the command succeeds. This is expected when sample counts, uplift, or confidence gates are not met. Exit code `2` means invalid input or that no usable proposal could be created.
+## 5. Review; never auto-promote
 
-## 4. Review before activation
+Review attribution, sample counts, skipped evidence, feature freshness, metric definitions, baseline/candidate scores, mean uplift, confidence lower bound, and candidate weights. Use independent validation if the experiment plan requires it. An authenticated and authorized human must approve an eligible proposal through the application's governance boundary with the current expected revision and a recorded reason.
 
-Review the CLI report and the persisted proposal:
-- verify attribution, sample counts, skipped reasons, feature freshness, metric semantics, uplift, and confidence lower bound;
-- inspect the active baseline and candidate weight differences;
-- repeat on an independent benchmark if the evaluation plan requires it;
-- have an authenticated and authorized reviewer approve the proposal through the application's governance boundary using its current expected revision.
+The CLI deliberately never calls `approve()` and reports `"activation_performed": false`. The JSON policy store is for one process; use a transactional store with locking or compare-and-swap for multi-worker deployments.
 
-The CLI intentionally never calls `approve()`; it reports `"activation_performed": false`. The JSON lifecycle store is single-process and is not safe for concurrent multi-worker approval workflows. Use a transactional store with revision checks for that deployment shape.
-
-## 5. Validation boundary
-
-The CLI tests use synthetic data only as test fixtures to test wiring and the non-activation invariant. They are not empirical model benchmarks and must never be used as evidence that one real model is better than another.
-
-The command does not automatically read live provider health, usage, pricing, or quality stores. The feature snapshot is an explicit input so that each proposal can be tied to a reproducible snapshot. Automatic snapshot collection is a separate integration task.
+The B32 runner and integration tests do not create evidence about which real model is best until you run them against configured external providers and your own benchmark. Test fixtures use mock providers solely to verify wiring and the non-activation invariant.
