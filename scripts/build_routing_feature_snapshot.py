@@ -43,9 +43,15 @@ def _load_health_states(path: Path | None) -> tuple[dict[str, dict[str, Any]], l
 def _usage_groups(records: tuple[ModelUsageRecord, ...]) -> dict[tuple[str, str, ModelTask], list[ModelUsageRecord]]:
     groups: dict[tuple[str, str, ModelTask], list[ModelUsageRecord]] = {}
     for record in records:
-        if not record.provider or not record.model:
+        requested_model = record.metadata.get("requested_model")
+        model_key = (
+            requested_model.strip()
+            if isinstance(requested_model, str) and requested_model.strip()
+            else record.model
+        )
+        if not record.provider or not model_key:
             continue
-        groups.setdefault((record.provider, record.model, record.task), []).append(record)
+        groups.setdefault((record.provider, model_key, record.task), []).append(record)
     return groups
 
 
@@ -169,6 +175,7 @@ def build_snapshot(
             "evidence": {
                 "usage_attempts": len(records),
                 "successful_attempts": successful,
+                "observed_response_models": sorted({item.model for item in records}),
                 "mean_latency_ms": mean_latency,
                 "priced_attempts": len(priced_records),
                 "mean_estimated_cost_usd": mean_cost,
