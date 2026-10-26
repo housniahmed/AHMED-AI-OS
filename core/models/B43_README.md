@@ -83,6 +83,10 @@ When `MODEL_ROUTING_MODE=adaptive`, the provider factory passes the optimizer to
 
 ## Operational benchmark workflow
 
+For live, paired measurements, configure at least two provider/model routes per task and run `scripts/run_model_routing_benchmark.py` against a version 1 dataset of real task prompts and deterministic scoring criteria. It tests each route independently rather than allowing the active adaptive policy to choose the winner. Requests go to configured external providers and may incur costs.
+
+The runner saves actual outputs and attribution in the versioned B32 evaluation-run format. Then `scripts/propose_routing_policy.py` reads that run plus an explicit normalized B39/B40/B42 feature snapshot and persists proposals. The complete workflow and scoring schema are in [B43 Benchmark Runbook](B43_BENCHMARK_RUNBOOK.md).
+
 B32 evaluation runs can be exported as versioned JSON with `save_evaluation_run(run, path)` from `core.evaluation.serialization`. From the repository root, the B43 CLI reads that real run plus an explicit normalized B39/B40/B42 feature snapshot and persists proposals:
 
 ```bash
