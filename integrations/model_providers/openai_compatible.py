@@ -20,6 +20,7 @@ from core.models.policy_learning import (
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
 from core.models.router import ModelRoute, ModelRouter
+from core.models.resilience import InMemoryProviderHealthStore, JsonFileProviderHealthStore
 from core.models.usage import InMemoryModelUsageStore, JsonFileModelUsageStore, ModelPricingCatalog
 
 
@@ -185,6 +186,7 @@ def build_model_router_from_env() -> ModelRouter | None:
     """Build a single- or multi-provider router from environment configuration."""
     provider_ids = os.getenv("MODEL_PROVIDER_IDS", "").strip()
     usage_store, pricing_catalog = _usage_configuration_from_env()
+    health_store = _health_configuration_from_env()
     adaptive_engine = _adaptive_configuration_from_env()
 
     if provider_ids:
@@ -237,6 +239,7 @@ def build_model_router_from_env() -> ModelRouter | None:
         return ModelRouter(
             providers,
             tuple(routes),
+            health_store=health_store,
             usage_store=usage_store,
             pricing_catalog=pricing_catalog,
             adaptive_engine=adaptive_engine,
@@ -257,9 +260,20 @@ def build_model_router_from_env() -> ModelRouter | None:
     return ModelRouter(
         {provider.name: provider},
         routes,
+        health_store=health_store,
         usage_store=usage_store,
         pricing_catalog=pricing_catalog,
         adaptive_engine=adaptive_engine,
+    )
+
+
+def _health_configuration_from_env():
+    """Build optional durable B39 provider-health storage."""
+    health_path = os.getenv("MODEL_HEALTH_STORE_PATH", "").strip()
+    return (
+        JsonFileProviderHealthStore(health_path)
+        if health_path
+        else InMemoryProviderHealthStore()
     )
 
 
