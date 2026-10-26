@@ -173,7 +173,7 @@ def build_snapshot(
         return {
             "schema_version": 1,
             "generated_at": generated_at,
-            "source": "explicit_b39_b40_b42_store_snapshot",
+            "source": "historical_b39_optional_b40_b42_store_snapshot",
             "features": [],
             "included_model_tasks": 0,
             "skipped_model_tasks": len(skipped),
@@ -189,7 +189,7 @@ def build_snapshot(
     return {
         "schema_version": 1,
         "generated_at": generated_at,
-        "source": "explicit_b39_b40_b42_store_snapshot",
+        "source": "historical_b39_optional_b40_b42_store_snapshot",
         "features": features,
         "included_model_tasks": len(features),
         "skipped_model_tasks": len(skipped),
