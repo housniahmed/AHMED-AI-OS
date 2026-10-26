@@ -308,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
             "dataset_case_count": len(dataset),
             **report,
             "result_file_written": True,
-            "real_provider_calls_attempted": report["logical_evaluation_calls"],
+            "logical_model_requests_submitted": report["logical_evaluation_calls"],
         }
         print(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False))
         return 1 if report["summary"]["errors"] else 0
