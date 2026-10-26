@@ -80,3 +80,16 @@ When `MODEL_ROUTING_MODE=adaptive`, the provider factory passes the optimizer to
 - The B39 circuit breaker and fallback behavior remain in the router.
 - B43 does not execute tools or change B17/B18/B33 permissions/governance.
 - JSON persistence is single-process; use transactional storage with locking for multi-worker environments.
+
+## Operational benchmark workflow
+
+B32 evaluation runs can be exported as versioned JSON with `save_evaluation_run(run, path)` from `core.evaluation.serialization`. From the repository root, the B43 CLI reads that real run plus an explicit normalized B39/B40/B42 feature snapshot and persists proposals:
+
+```bash
+python scripts/propose_routing_policy.py \
+  --evaluation-run artifacts/evaluation-run.json \
+  --features artifacts/routing-features.json \
+  --store-path data/model-routing-policies.json
+```
+
+The CLI reports per-task sample counts, skipped evidence, held-out uplift, confidence bounds, gate status, and candidate weights. It never activates a candidate. See [B43 Benchmark Runbook](B43_BENCHMARK_RUNBOOK.md) for the input schema, normalized feature semantics, review steps, and limitations. Synthetic fixtures in the integration tests verify the workflow only; they are not real model benchmark evidence.
