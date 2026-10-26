@@ -68,3 +68,45 @@ Model family is preferably supplied as evaluation metadata. A small deterministi
 B41 consumes these signals with confidence-aware blending, so a small number of evaluations cannot dominate routing.
 
 B42 does not tune routing weights autonomously and does not authorize execution. It supplies learned quality evidence only. This preserves the separation between evaluation, policy, security, governance and execution.
+
+## B43 — Model Routing Learning & Policy Optimization
+
+B43 optimizes the weights used by B41, per task, from paired offline benchmark outcomes. It does not alter the active policy during optimization.
+
+### Evidence pipeline
+
+`B32 EvaluationRun + explicit benchmark group metadata + B39/B40/B42 feature snapshot → paired training sample → train/validation split → policy proposal → human approval → new policy revision`
+
+Each evaluation result must contain provider, model, task, metric scores and one shared benchmark identifier (`benchmark_case_id`, `dataset_case_id`, or `evaluation_group_id`). At least two candidate models must be evaluated on the same benchmark group. A feature resolver supplies normalized [0,1] reliability, latency, quality and cost features based on B39/B40/B42. Rows with missing evidence are skipped rather than synthesized.
+
+### Policy search
+
+The optimizer creates a deterministic, bounded candidate set by blending the current active weights with reliability-, latency-, quality-, cost-focused and balanced weight recipes. It selects a candidate on a deterministic training split and evaluates it on held-out validation samples.
+
+### Statistical promotion gates
+
+A proposal is eligible only when all are true:
+
+- minimum training and validation sample counts are met
+- mean held-out quality uplift meets `MODEL_POLICY_MIN_MEAN_UPLIFT`
+- the lower confidence bound of paired uplift is greater than zero
+
+Insufficient evidence is saved as a non-approvable proposal. B43 never automatically promotes a candidate policy.
+
+### Approval, revisions and rollback
+
+`RoutingPolicyOptimizer.propose(...)` creates a proposal.
+`approve(..., approver, expected_revision, reason)` applies it only when a human identity and current revision are supplied.
+`reject(...)` rejects a pending proposal.
+`rollback(..., expected_revision, reason)` writes a new revision restoring the previous policy.
+All these transitions produce audit events. Revision checks prevent a stale proposal from overwriting a newer active policy.
+
+### Integration with B41
+
+`AdaptiveRoutingEngine(policy_source=optimizer)` resolves the active policy for each task. The B43 environment factory wiring is used when `MODEL_ROUTING_MODE=adaptive`. Priority mode remains the default.
+
+### Persistence and operational boundary
+
+`JsonFilePolicyLifecycleStore` persists revisions, proposal states and audit events through `MODEL_ROUTING_POLICY_STORE_PATH`. It is intended for a single application process. Multi-worker deployments should use a transactional database implementation with compare-and-swap or row locking.
+
+B43 adjusts weights only. It does not bypass circuit breakers, route eligibility constraints, tool permissions, B18 approval or B33 security.
