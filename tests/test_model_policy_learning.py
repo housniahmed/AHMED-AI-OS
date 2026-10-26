@@ -124,10 +124,13 @@ def test_approval_requires_explicit_actor_and_current_revision():
         service.approve(
             proposal.id, approver="", expected_revision=baseline.revision, reason="test"
         )
+    engine = AdaptiveRoutingEngine(policy=baseline.policy, policy_source=service)
     revision = service.approve(
         proposal.id, approver="human-reviewer",
         expected_revision=baseline.revision, reason="benchmark uplift validated",
     )
+    assert engine._policy_for(ModelTask.REASONING) == proposal.candidate_policy
+    assert engine._policy_for(ModelTask.CHAT) == baseline.policy
     assert revision.revision == baseline.revision + 1
     assert service.get_active_policy(ModelTask.REASONING) == proposal.candidate_policy
     assert service.store.get_proposal(proposal.id).status is PolicyProposalStatus.ACTIVE
@@ -137,8 +140,7 @@ def test_stale_proposal_cannot_be_promoted():
     service = _service()
     baseline = service.ensure_baseline(ModelTask.REASONING)
     proposal = service.propose(ModelTask.REASONING, tuple(_sample(i) for i in range(100)))
-    if proposal.status is not PolicyProposalStatus.PENDING_APPROVAL:
-        pytest.skip("sample split or evidence did not pass gates for this deterministic candidate set")
+    assert proposal.status is PolicyProposalStatus.PENDING_APPROVAL
     with pytest.raises(RuntimeError, match="stale"):
         service.approve(
             proposal.id, approver="human",
@@ -151,8 +153,7 @@ def test_rollback_restores_previous_active_policy():
     service = _service()
     baseline = service.ensure_baseline(ModelTask.REASONING)
     proposal = service.propose(ModelTask.REASONING, tuple(_sample(i) for i in range(100)))
-    if proposal.status is not PolicyProposalStatus.PENDING_APPROVAL:
-        pytest.skip("sample split or evidence did not pass gates for this deterministic candidate set")
+    assert proposal.status is PolicyProposalStatus.PENDING_APPROVAL
     active = service.approve(
         proposal.id, approver="human",
         expected_revision=baseline.revision, reason="promote test policy",
