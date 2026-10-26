@@ -41,3 +41,9 @@ For best attribution, evaluation cases should include:
 The learned result is exposed as a `QualitySignal` compatible with B41. Quality is bounded to [0,1], confidence is explicit, and missing model identity or metrics produces no quality signal.
 
 B42 supports exact-model and family-level learning and optional durable profiles through its JSON profile store. It does not turn evaluation status alone into a quality score.
+
+## Versioned run export
+
+Use `core.evaluation.serialization.save_evaluation_run(run, path)` to persist an `EvaluationRun` as versioned JSON, and `load_evaluation_run(path)` to restore it for offline processing. The format preserves case attribution and metric evidence; export requires JSON-compatible outputs and metadata.
+
+For the B43 routing-policy proposal workflow, every result should carry explicit provider/model/task attribution and a stable shared benchmark group ID. See [B43 Benchmark Runbook](../models/B43_BENCHMARK_RUNBOOK.md). The downstream CLI consumes actual exported evaluation results plus an explicit feature snapshot; it does not synthesize missing evidence or activate policies.
