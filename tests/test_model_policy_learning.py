@@ -113,8 +113,7 @@ def test_approval_requires_explicit_actor_and_current_revision():
     # Ensure an active baseline before creating a proposal.
     baseline = service.ensure_baseline(ModelTask.REASONING)
     proposal = service.propose(ModelTask.REASONING, tuple(_sample(i) for i in range(100)))
-    if proposal.status is not PolicyProposalStatus.PENDING_APPROVAL:
-        pytest.skip("sample split or evidence did not pass gates for this deterministic candidate set")
+    assert proposal.status is PolicyProposalStatus.PENDING_APPROVAL
     with pytest.raises(ValueError):
         service.approve(
             proposal.id, approver="", expected_revision=baseline.revision, reason="test"
