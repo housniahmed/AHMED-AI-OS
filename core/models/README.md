@@ -110,3 +110,7 @@ All these transitions produce audit events. Revision checks prevent a stale prop
 `JsonFilePolicyLifecycleStore` persists revisions, proposal states and audit events through `MODEL_ROUTING_POLICY_STORE_PATH`. It is intended for a single application process. Multi-worker deployments should use a transactional database implementation with compare-and-swap or row locking.
 
 B43 adjusts weights only. It does not bypass circuit breakers, route eligibility constraints, tool permissions, B18 approval or B33 security.
+
+### Benchmark-to-proposal workflow
+
+Use `core.evaluation.serialization.save_evaluation_run(...)` to export a B32 evaluation run, then run `python scripts/propose_routing_policy.py --evaluation-run ... --features ...` to create auditable B43 proposals from paired outcomes and an explicit normalized feature snapshot. The command is proposal-only and cannot approve or activate a policy. The full input schema and review procedure are documented in [B43_BENCHMARK_RUNBOOK.md](B43_BENCHMARK_RUNBOOK.md).
