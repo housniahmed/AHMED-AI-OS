@@ -16,5 +16,14 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: python -m pip install --upgrade pip && pip install .
-      - name: Test
+      - name: Focused model runtime tests
+        run: >-
+          pytest -q
+          tests/test_model_policy_learning.py
+          tests/test_model_adaptive.py
+          tests/test_model_quality.py
+          tests/test_model_router.py
+          tests/test_model_usage.py
+          tests/test_openai_compatible_provider.py
+      - name: Full regression suite
         run: pytest -q
