@@ -67,7 +67,7 @@ rollback_revision = optimizer.rollback(
 )
 ```
 
-Approval requires a named actor, a reason, and the expected active revision. Stale proposals are rejected. Revisions, proposal state, and audit events can be persisted with `JsonFilePolicyLifecycleStore`.
+Approval requires a named actor, a reason, and the expected active revision. Stale proposals are rejected. The caller must authenticate and authorize the actor; the supplied actor string is audit attribution, not authentication. Revisions, proposal state, and audit events can be persisted with `JsonFilePolicyLifecycleStore`.
 
 ## Runtime integration
 
