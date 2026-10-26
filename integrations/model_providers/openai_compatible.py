@@ -11,6 +11,12 @@ from urllib.request import Request, urlopen
 
 from core.models.adaptive import AdaptiveRoutingEngine, AdaptiveRoutingPolicy
 from core.models.quality import JsonFileQualityProfileStore, ModelQualityIntelligence, QualityLearningPolicy
+from core.models.policy_learning import (
+    InMemoryPolicyLifecycleStore,
+    JsonFilePolicyLifecycleStore,
+    PolicyOptimizationConfig,
+    RoutingPolicyOptimizer,
+)
 from core.models.contracts import ModelRequest, ModelResponse, ModelTask
 from core.models.providers import ModelProvider, ModelProviderError
 from core.models.router import ModelRoute, ModelRouter
@@ -328,7 +334,26 @@ def _adaptive_configuration_from_env() -> AdaptiveRoutingEngine | None:
         ),
         profile_store=profile_store,
     )
+
+    policy_store_path = os.getenv("MODEL_ROUTING_POLICY_STORE_PATH", "").strip()
+    policy_store = (
+        JsonFilePolicyLifecycleStore(policy_store_path)
+        if policy_store_path
+        else InMemoryPolicyLifecycleStore()
+    )
+    policy_optimizer = RoutingPolicyOptimizer(
+        store=policy_store,
+        config=PolicyOptimizationConfig(
+            min_training_samples=int(float_value("MODEL_POLICY_MIN_TRAINING_SAMPLES", 20.0)),
+            min_validation_samples=int(float_value("MODEL_POLICY_MIN_VALIDATION_SAMPLES", 20.0)),
+            min_mean_uplift=float_value("MODEL_POLICY_MIN_MEAN_UPLIFT", 0.02),
+            confidence_z=float_value("MODEL_POLICY_CONFIDENCE_Z", 1.96),
+            exploration_rate=float_value("MODEL_POLICY_EXPLORATION_RATE", 0.35),
+        ),
+        default_policy=policy,
+    )
     return AdaptiveRoutingEngine(
         policy=policy,
         quality_store=quality_intelligence,
+        policy_source=policy_optimizer,
     )
