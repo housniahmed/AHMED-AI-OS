@@ -60,9 +60,9 @@ tests/       # automated tests
 
 ## Status
 
-**Architecture build — B1 through B27 contracts implemented**
+**Architecture build — evolving core domains; model runtime through B43**
 
-The repository is being built incrementally with explicit contracts, provider-neutral core components, and tests. B26 adds external integration ports for Calendar, Gmail, and Telegram without claiming live account connectivity. B27 adds the provider-neutral Business OS domain for CRM, sales, offers, deals, and campaigns.
+The repository is being built incrementally with explicit contracts, provider-neutral core components, and tests. The model runtime now includes B39 reliability/resilience, B40 usage and cost telemetry, B41 adaptive routing, B42 evaluation-derived quality signals, and B43 offline routing-policy optimization with statistical gates, audit history, explicit approval, and rollback. B43 benchmark proposals can be generated from exported B32 evaluation runs and an explicit feature snapshot; the CLI does not activate policies. B26 adds external integration ports for Calendar, Gmail, and Telegram without claiming live account connectivity. B27 adds the provider-neutral Business OS domain for CRM, sales, offers, deals, and campaigns.
 
 ### Current integration boundary
 
