@@ -58,11 +58,13 @@ def _features(path: Path) -> None:
         json.dumps(
             {
                 "schema_version": 1,
+                "generated_at": "2026-01-01T00:00:00+00:00",
                 "features": [
                     {
                         "provider": "test-provider",
                         "model": "cheap-model",
                         "task": "reasoning",
+                        "quality_last_observed_at": "2025-12-15T00:00:00+00:00",
                         "reliability": 0.95,
                         "latency": 0.70,
                         "quality": 0.60,
@@ -72,6 +74,7 @@ def _features(path: Path) -> None:
                         "provider": "test-provider",
                         "model": "quality-model",
                         "task": "reasoning",
+                        "quality_last_observed_at": "2025-12-15T00:00:00+00:00",
                         "reliability": 0.90,
                         "latency": 0.55,
                         "quality": 0.95,
