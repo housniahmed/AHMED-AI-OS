@@ -11,7 +11,10 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import replace
 from pathlib import Path
+from time import perf_counter
+from uuid import UUID
 from typing import Any
 
 from core.evaluation.models import EvaluationCase, EvaluationRun, MetricResult
@@ -245,26 +248,42 @@ def _build_evaluation_run(
                     )
                 )
 
+    case_durations_ms: dict[UUID, float] = {}
+
     def runner(case: EvaluationCase) -> str:
-        metadata = case.metadata
-        task = ModelTask(str(metadata["task"]))
-        key = (task, str(metadata["provider"]), str(metadata["model"]))
-        # Each candidate/case receives fresh local health and usage stores so
-        # benchmark failures cannot open the production circuit or pollute B40.
-        response = _isolated_router(base_router, route_lookup[key]).generate(
-            ModelRequest(
-                task=task,
-                input_text=str(case.input),
-                model=str(metadata["model"]),
-                max_tokens=max_tokens,
-                temperature=temperature,
-                metadata={"benchmark_case_id": metadata["benchmark_case_id"]},
+        started = perf_counter()
+        try:
+            metadata = case.metadata
+            task = ModelTask(str(metadata["task"]))
+            key = (task, str(metadata["provider"]), str(metadata["model"]))
+            # Each candidate/case receives fresh local health and usage stores so
+            # benchmark failures cannot open the production circuit or pollute B40.
+            response = _isolated_router(base_router, route_lookup[key]).generate(
+                ModelRequest(
+                    task=task,
+                    input_text=str(case.input),
+                    model=str(metadata["model"]),
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    metadata={"benchmark_case_id": metadata["benchmark_case_id"]},
+                )
             )
-        )
-        return response.text
+            return response.text
+        finally:
+            case_durations_ms[case.id] = round(
+                max((perf_counter() - started) * 1000.0, 0.0),
+                6,
+            )
 
     framework = EvaluationFramework(DeterministicEvaluator([DeterministicBenchmarkMetric()]))
     run = framework.run(evaluation_cases, runner)
+    run = replace(
+        run,
+        results=tuple(
+            replace(result, duration_ms=case_durations_ms.get(result.case_id))
+            for result in run.results
+        ),
+    )
     summary = EvaluationFramework.summary(run)
     by_task = {}
     for task in sorted(tasks, key=lambda item: item.value):
