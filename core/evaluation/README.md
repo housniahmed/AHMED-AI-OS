@@ -42,8 +42,10 @@ The learned result is exposed as a `QualitySignal` compatible with B41. Quality 
 
 B42 supports exact-model and family-level learning and optional durable profiles through its JSON profile store. It does not turn evaluation status alone into a quality score.
 
-## Versioned run export
+## Versioned run export and paired model benchmark
 
-Use `core.evaluation.serialization.save_evaluation_run(run, path)` to persist an `EvaluationRun` as versioned JSON, and `load_evaluation_run(path)` to restore it for offline processing. The format preserves case attribution and metric evidence; export requires JSON-compatible outputs and metadata.
+Use `core.evaluation.serialization.save_evaluation_run(run, path)` to persist an `EvaluationRun` as versioned JSON, and `load_evaluation_run(path)` to restore it for offline processing. The format preserves case attribution, metric evidence, outputs, errors, and duration; export requires JSON-compatible outputs and metadata.
 
-For the B43 routing-policy proposal workflow, every result should carry explicit provider/model/task attribution and a stable shared benchmark group ID. See [B43 Benchmark Runbook](../models/B43_BENCHMARK_RUNBOOK.md). The downstream CLI consumes actual exported evaluation results plus an explicit feature snapshot; it does not synthesize missing evidence or activate policies.
+The B32 route benchmark runner is `scripts/run_model_routing_benchmark.py`. It evaluates each enabled/healthy configured route independently against the same benchmark cases, saves actual results with explicit provider/model/task/group attribution, records per-case elapsed duration, and uses isolated in-memory health/usage stores to avoid mutating production telemetry. Calls still go to configured external providers and may incur charges.
+
+For the B43 workflow, seed missing B42 profiles from a **prior** attributed evaluation with `scripts/ingest_model_quality.py`, then freeze normalized historical features with `scripts/build_routing_feature_snapshot.py`, before executing the target benchmark. The B43 proposal CLI enforces snapshot/profile timestamps to reduce feature leakage. See [B43 Benchmark Runbook](../models/B43_BENCHMARK_RUNBOOK.md). The proposal workflow does not synthesize missing evidence or activate policies.
