@@ -18,7 +18,9 @@ from core.evaluation.models import EvaluationCase, EvaluationRun, MetricResult
 from core.evaluation.serialization import save_evaluation_run
 from core.evaluation.service import DeterministicEvaluator, EvaluationFramework, EvaluationMetric
 from core.models.contracts import ModelRequest, ModelTask
+from core.models.resilience import InMemoryProviderHealthStore
 from core.models.router import ModelRoute, ModelRouter
+from core.models.usage import InMemoryModelUsageStore
 from integrations.model_providers.openai_compatible import build_model_router_from_env
 
 
@@ -158,9 +160,20 @@ def _validate_expected(case_id: str, expected: dict[str, Any]) -> None:
 
 def _route_candidates(router: ModelRouter, tasks: set[ModelTask]) -> dict[ModelTask, tuple[ModelRoute, ...]]:
     by_task: dict[ModelTask, dict[tuple[str, str], ModelRoute]] = {task: {} for task in tasks}
+    health = router.provider_status()
+    now = router.clock()
     for route in router.routes:
-        if route.task in tasks and route.provider in router.providers:
-            by_task[route.task][(route.provider, route.model)] = route
+        if route.task not in tasks or route.provider not in router.providers:
+            continue
+        state = health.get(route.provider)
+        if state is not None:
+            if not state.enabled:
+                continue
+            if state.circuit_open and (
+                state.cooldown_until is None or now < state.cooldown_until
+            ):
+                continue
+        by_task[route.task][(route.provider, route.model)] = route
     return {
         task: tuple(sorted(routes.values(), key=lambda item: (item.priority * -1, item.provider, item.model)))
         for task, routes in by_task.items()
@@ -168,14 +181,18 @@ def _route_candidates(router: ModelRouter, tasks: set[ModelTask]) -> dict[ModelT
 
 
 def _isolated_router(base: ModelRouter, route: ModelRoute) -> ModelRouter:
-    """Create a single-candidate router so adaptive arbitration cannot skew the benchmark."""
+    """Build an independent one-route router without writing production telemetry."""
+    health_store = InMemoryProviderHealthStore()
+    initial_state = base.provider_status().get(route.provider)
+    if initial_state is not None:
+        health_store.save(route.provider, initial_state)
     return ModelRouter(
         providers={route.provider: base.providers[route.provider]},
         routes=(route,),
         retry_policy=base.retry_policy,
         circuit_policy=base.circuit_policy,
-        health_store=base.health_store,
-        usage_store=base.usage_store,
+        health_store=health_store,
+        usage_store=InMemoryModelUsageStore(),
         pricing_catalog=base.pricing_catalog,
         adaptive_engine=None,
         clock=base.clock,
@@ -204,8 +221,8 @@ def _build_evaluation_run(
         task: [item for item in dataset if item["task"] == task][:limit_per_task]
         for task in tasks
     }
-    isolated = {
-        (route.task, route.provider, route.model): _isolated_router(base_router, route)
+    route_lookup = {
+        (route.task, route.provider, route.model): route
         for task_routes in candidates.values()
         for route in task_routes
     }
@@ -232,7 +249,9 @@ def _build_evaluation_run(
         metadata = case.metadata
         task = ModelTask(str(metadata["task"]))
         key = (task, str(metadata["provider"]), str(metadata["model"]))
-        response = isolated[key].generate(
+        # Each candidate/case receives fresh local health and usage stores so
+        # benchmark failures cannot open the production circuit or pollute B40.
+        response = _isolated_router(base_router, route_lookup[key]).generate(
             ModelRequest(
                 task=task,
                 input_text=str(case.input),
