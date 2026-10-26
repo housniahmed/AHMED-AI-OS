@@ -895,8 +895,7 @@ class RoutingPolicyOptimizer:
             raise KeyError(f"unknown policy proposal: {proposal_id}")
         return proposal
 
-    @staticmethod
-    def _gate_reason(stats: PolicyComparisonStats, candidate_is_baseline: bool) -> str:
+    def _gate_reason(self, stats: PolicyComparisonStats, candidate_is_baseline: bool) -> str:
         if candidate_is_baseline:
             return "no candidate outperformed the active policy on training data"
         if stats.training_samples == 0 or stats.validation_samples == 0:
