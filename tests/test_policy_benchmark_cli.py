@@ -148,11 +148,13 @@ def test_cli_does_not_create_proposal_when_no_paired_features_exist(tmp_path, ca
         json.dumps(
             {
                 "schema_version": 1,
+                "generated_at": "2026-01-01T00:00:00+00:00",
                 "features": [
                     {
                         "provider": "test-provider",
                         "model": "cheap-model",
                         "task": "reasoning",
+                        "quality_last_observed_at": "2025-12-15T00:00:00+00:00",
                         "reliability": 0.95,
                         "latency": 0.70,
                         "quality": 0.60,
@@ -179,4 +181,28 @@ def test_cli_does_not_create_proposal_when_no_paired_features_exist(tmp_path, ca
     assert report["paired_sample_count"] == 0
     assert report["proposal_count"] == 0
     assert report["activation_performed"] is False
+    assert not store_path.exists()
+
+def test_cli_rejects_features_generated_after_benchmark(tmp_path, capsys):
+    run_path = tmp_path / "evaluation-run.json"
+    feature_path = tmp_path / "features.json"
+    store_path = tmp_path / "policies.json"
+    save_evaluation_run(_benchmark_run(count=2), run_path)
+    _features(feature_path)
+    payload = json.loads(feature_path.read_text(encoding="utf-8"))
+    payload["generated_at"] = "2099-01-01T00:00:00+00:00"
+    feature_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--evaluation-run",
+            str(run_path),
+            "--features",
+            str(feature_path),
+            "--store-path",
+            str(store_path),
+        ]
+    )
+    assert exit_code == 2
+    assert "feature snapshot must be generated before the evaluation run starts" in capsys.readouterr().err
     assert not store_path.exists()
