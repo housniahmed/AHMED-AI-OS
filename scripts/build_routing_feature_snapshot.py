@@ -124,9 +124,21 @@ def build_snapshot(
             continue
         latency_score = 1.0 / (1.0 + mean_latency / latency_scale_ms)
 
-        priced_records = [item for item in records if item.estimated_cost_usd is not None]
-        if len(priced_records) != len(records):
-            skipped.append({"provider": provider, "model": model, "task": task.value, "reason": f"incomplete_pricing:{len(priced_records)}/{len(records)}_attempts_priced"})
+        successful_records = [item for item in records if item.success]
+        priced_records = [
+            item for item in successful_records
+            if item.estimated_cost_usd is not None
+        ]
+        if not successful_records or len(priced_records) != len(successful_records):
+            skipped.append({
+                "provider": provider,
+                "model": model,
+                "task": task.value,
+                "reason": (
+                    f"incomplete_pricing:{len(priced_records)}/"
+                    f"{len(successful_records)}_successful_attempts_priced"
+                ),
+            })
             continue
         mean_cost = sum(float(item.estimated_cost_usd) for item in priced_records) / len(priced_records)
         if not math.isfinite(mean_cost) or mean_cost < 0:
