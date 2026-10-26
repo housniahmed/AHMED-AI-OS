@@ -4,6 +4,40 @@ This runbook connects an actual B32 evaluation run to the B43 optimizer. It is a
 
 ## 1. Produce and export a B32 evaluation run
 
+First, prepare a dataset JSON file for the actual workflows you want to compare. The runner accepts a version 1 document with a `cases` array. Each case has a stable ID, task, prompt, scoring specification, and optional threshold. Example schema (replace this illustrative case with your own representative prompts and expected facts):
+
+```json
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "reasoning-001",
+      "name": "check a factual answer",
+      "task": "reasoning",
+      "input": "YOUR REAL BENCHMARK PROMPT",
+      "expected": {
+        "kind": "required_terms",
+        "terms": ["EXPECTED FACT A", "EXPECTED FACT B"]
+      },
+      "threshold": 0.75
+    }
+  ]
+}
+```
+
+The deterministic scorer supports `required_terms` (fraction of case-insensitive terms found), `exact_answer` (normalized exact match), and `json_fields` (fraction of expected JSON key/value pairs that match). These metrics are only appropriate when their definitions match the task; they are not a universal measure of model quality.
+
+Configure at least two routes for every benchmark task using the existing `MODEL_PROVIDER_*` or `MODEL_PROVIDER_IDS` environment settings, then run:
+
+```bash
+python scripts/run_model_routing_benchmark.py \
+  --dataset evals/my-benchmark.json \
+  --output artifacts/evaluation-run.json \
+  --limit-per-task 10
+```
+
+The default limit of 10 paired cases per task is a cost-conscious smoke run, not enough for default B43 promotion gates. With the current 20% deterministic validation split, plan roughly 100 paired cases per task to yield at least 20 validation samples and 20 training samples; use `--limit-per-task 100` only after preparing that dataset and confirming the expected provider cost. Every selected case is sent to each configured candidate route for its task. The runner saves actual outputs and attribution to the versioned B32 run format. Do not commit sensitive prompts or raw provider outputs to the repository.
+
 Use the existing B32 `EvaluationFramework` with the benchmark cases and runner for your actual provider/model candidates. Each `EvaluationCase.metadata` must explicitly include:
 
 - `provider`: provider identity used for that run
@@ -24,7 +58,7 @@ save_evaluation_run(evaluation_run, "artifacts/evaluation-run.json")
 
 The JSON schema is versioned and preserves run IDs, case IDs, metrics, evaluation status, duration, output, errors, and attribution metadata. Exported outputs and metadata must be JSON-compatible.
 
-## 2. Prepare the feature snapshot
+## 3. Prepare the feature snapshot
 
 Create a JSON file named, for example, `artifacts/routing-features.json`:
 
@@ -56,7 +90,7 @@ All four features must be numeric and normalized to `[0, 1]`, with **higher mean
 
 Do not fill missing evidence with estimates that look observed. Missing feature rows are skipped, and unpaired groups cannot be used by the optimizer.
 
-## 3. Build proposals
+## 4. Build proposals
 
 From the repository root, run:
 
@@ -73,7 +107,7 @@ Defaults are 20 training samples, 20 validation samples, mean held-out uplift of
 
 A proposal can have status `insufficient_evidence` even when the command succeeds. This is expected when sample counts, uplift, or confidence gates are not met. Exit code `2` means invalid input or that no usable proposal could be created.
 
-## 4. Review before activation
+## 5. Review before activation
 
 Review the CLI report and the persisted proposal:
 - verify attribution, sample counts, skipped reasons, feature freshness, metric semantics, uplift, and confidence lower bound;
@@ -83,7 +117,7 @@ Review the CLI report and the persisted proposal:
 
 The CLI intentionally never calls `approve()`; it reports `"activation_performed": false`. The JSON lifecycle store is single-process and is not safe for concurrent multi-worker approval workflows. Use a transactional store with revision checks for that deployment shape.
 
-## 5. Validation boundary
+## 6. Validation boundary
 
 The CLI tests use synthetic data only as test fixtures to test wiring and the non-activation invariant. They are not empirical model benchmarks and must never be used as evidence that one real model is better than another.
 
