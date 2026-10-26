@@ -1,6 +1,7 @@
 import pytest
 
 from core.models.contracts import ModelRequest, ModelTask
+from core.models.resilience import JsonFileProviderHealthStore, ProviderHealthState
 from integrations.model_providers.openai_compatible import (
     ModelProviderConfigurationError,
     ModelProviderRequestError,
@@ -124,3 +125,22 @@ def test_environment_factory_wires_b43_policy_optimizer_in_adaptive_mode(monkeyp
     assert router.adaptive_engine is not None
     assert router.adaptive_engine.policy_source is not None
     assert router.adaptive_engine._policy_for(ModelTask.REASONING) == router.adaptive_engine.policy
+
+def test_environment_factory_wires_persistent_provider_health_store(monkeypatch, tmp_path):
+    health_path = tmp_path / "model-health.json"
+    monkeypatch.setenv("MODEL_PROVIDER_IDS", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_NAME", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_BASE_URL", "https://primary.example/v1")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_API_KEY", "primary-secret")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_MODEL", "primary-model")
+    monkeypatch.setenv("MODEL_ROUTING_MODE", "priority")
+    monkeypatch.setenv("MODEL_HEALTH_STORE_PATH", str(health_path))
+    monkeypatch.delenv("MODEL_USAGE_STORE_PATH", raising=False)
+
+    router = build_model_router_from_env()
+
+    assert router is not None
+    assert isinstance(router.health_store, JsonFileProviderHealthStore)
+    router.health_store.save("primary", ProviderHealthState(successes=3, failures=1))
+    assert health_path.exists()
+    assert router.health_store.load("primary").failures == 1
