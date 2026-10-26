@@ -142,7 +142,22 @@ def test_cli_does_not_create_proposal_when_no_paired_features_exist(tmp_path, ca
     store_path = tmp_path / "policies.json"
     save_evaluation_run(_benchmark_run(count=2), run_path)
     feature_path.write_text(
-        json.dumps({"schema_version": 1, "features": []}),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "features": [
+                    {
+                        "provider": "test-provider",
+                        "model": "cheap-model",
+                        "task": "reasoning",
+                        "reliability": 0.95,
+                        "latency": 0.70,
+                        "quality": 0.60,
+                        "cost": 1.00,
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
 
