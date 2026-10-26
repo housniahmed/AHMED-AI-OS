@@ -43,6 +43,7 @@ def test_benchmark_runner_evaluates_every_candidate_on_same_case():
     )
 
     assert len(run.results) == 4
+    assert all(item.duration_ms is not None and item.duration_ms >= 0 for item in run.results)
     assert report["logical_evaluation_calls"] == 4
     assert report["by_task"]["reasoning"]["benchmark_cases"] == 2
     # The benchmark uses isolated in-memory health and usage stores.
