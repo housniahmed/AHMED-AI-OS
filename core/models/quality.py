@@ -284,6 +284,10 @@ class ModelQualityIntelligence:
         model = "*"
         return self.profile_store.get(provider, model, task, model_family)
 
+    def profiles(self) -> tuple[QualityProfile, ...]:
+        """Return the currently learned exact-model and family profiles."""
+        return self.profile_store.all()
+
     def quality_signals(self) -> tuple[Any, ...]:
         from core.models.adaptive import QualitySignal
 
