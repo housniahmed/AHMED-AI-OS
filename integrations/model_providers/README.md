@@ -17,3 +17,16 @@ Priority routing remains the default when MODEL_ROUTING_MODE=priority or when th
 Adaptive routing consumes B39 provider health state and B40 usage records. Quality is supplied separately through an injectable QualitySignalStore; the environment factory does not fabricate historical quality data.
 
 B41 only selects and ranks model routes. It does not execute tools, approve actions, alter security permissions, or bypass governance.
+
+## B43 — Routing Policy Learning
+
+When `MODEL_ROUTING_MODE=adaptive`, the factory wires a `RoutingPolicyOptimizer` into `AdaptiveRoutingEngine.policy_source`. Optional persistence and gates are configured through:
+
+- `MODEL_ROUTING_POLICY_STORE_PATH`
+- `MODEL_POLICY_MIN_TRAINING_SAMPLES`
+- `MODEL_POLICY_MIN_VALIDATION_SAMPLES`
+- `MODEL_POLICY_MIN_MEAN_UPLIFT`
+- `MODEL_POLICY_CONFIDENCE_Z`
+- `MODEL_POLICY_EXPLORATION_RATE`
+
+The optimizer only creates proposals. A caller must explicitly approve a proposal with its current expected revision and an approver identity before new weights are activated. The active policy is resolved per task, and rollback creates a new revision restoring the prior policy.
