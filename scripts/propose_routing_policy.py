@@ -167,7 +167,9 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("policy store path must not overwrite either input file")
 
         run = load_evaluation_run(args.evaluation_run)
-        feature_snapshot = _load_feature_snapshot(\n            args.features, evaluation_started_at=run.started_at\n        )
+        feature_snapshot = _load_feature_snapshot(
+            args.features, evaluation_started_at=run.started_at
+        )
         config = PolicyOptimizationConfig(
             min_training_samples=args.min_training_samples,
             min_validation_samples=args.min_validation_samples,
