@@ -98,6 +98,10 @@ class QualitySignal:
             raise ValueError("quality model_family must not be blank")
 
 
+class AdaptivePolicySource(Protocol):
+    def get_active_policy(self, task: ModelTask) -> AdaptiveRoutingPolicy | None: ...
+
+
 class QualitySignalStore(Protocol):
     def get(
         self,
@@ -165,9 +169,18 @@ class AdaptiveRoutingEngine:
         self,
         policy: AdaptiveRoutingPolicy | None = None,
         quality_store: QualitySignalStore | None = None,
+        policy_source: AdaptivePolicySource | None = None,
     ) -> None:
         self.policy = policy or AdaptiveRoutingPolicy()
         self.quality_store = quality_store or InMemoryQualitySignalStore()
+        self.policy_source = policy_source
+
+    def _policy_for(self, task: ModelTask) -> AdaptiveRoutingPolicy:
+        if self.policy_source is not None:
+            active = self.policy_source.get_active_policy(task)
+            if active is not None:
+                return active
+        return self.policy
 
     def choose(
         self,
@@ -177,6 +190,7 @@ class AdaptiveRoutingEngine:
         usage_records,
         task: ModelTask,
     ) -> RoutingDecision:
+        active_policy = self._policy_for(task)
         scored = [
             self.score(
                 route,
@@ -189,6 +203,7 @@ class AdaptiveRoutingEngine:
                     and record.task == task
                 ),
                 task=task,
+                policy=active_policy,
             )
             for route in routes
         ]
@@ -222,7 +237,7 @@ class AdaptiveRoutingEngine:
             selected=selected,
             ranked=ranked,
             excluded=excluded,
-            policy=self.policy,
+            policy=active_policy,
             reason=reason,
         )
 
@@ -242,7 +257,9 @@ class AdaptiveRoutingEngine:
         state: ProviderRuntimeState,
         usage: ModelUsageAggregate,
         task: ModelTask,
+        policy: AdaptiveRoutingPolicy | None = None,
     ) -> RouteScore:
+        active_policy = policy or self._policy_for(task)
         observed_attempts = state.successes + state.failures
         observed_reliability = (
             state.successes / observed_attempts if observed_attempts else None
@@ -253,7 +270,7 @@ class AdaptiveRoutingEngine:
 
         average_latency = usage.average_latency_ms if usage.attempts else None
         latency = (
-            1.0 / (1.0 + average_latency / self.policy.latency_score_scale_ms)
+            1.0 / (1.0 + average_latency / active_policy.latency_score_scale_ms)
             if average_latency is not None
             else 0.5
         )
@@ -267,10 +284,10 @@ class AdaptiveRoutingEngine:
         )
         quality_observed = signal is not None
         confidence = signal.confidence if signal is not None else 0.0
-        raw_quality = signal.score if signal is not None else self.policy.default_quality
+        raw_quality = signal.score if signal is not None else active_policy.default_quality
         quality = (
-            self.policy.default_quality
-            + confidence * (raw_quality - self.policy.default_quality)
+            active_policy.default_quality
+            + confidence * (raw_quality - active_policy.default_quality)
         )
 
         priced_attempts = usage.priced_attempts
@@ -280,40 +297,40 @@ class AdaptiveRoutingEngine:
             else None
         )
         cost = (
-            1.0 / (1.0 + max(average_cost, 0.0) / self.policy.cost_score_scale_usd)
+            1.0 / (1.0 + max(average_cost, 0.0) / active_policy.cost_score_scale_usd)
             if average_cost is not None
-            else self.policy.unknown_cost_score
+            else active_policy.unknown_cost_score
         )
 
         exclusion_reason = None
         if (
-            self.policy.min_reliability is not None
-            and reliability < self.policy.min_reliability
+            active_policy.min_reliability is not None
+            and reliability < active_policy.min_reliability
         ):
             exclusion_reason = (
                 f"reliability {reliability:.3f} below minimum "
-                f"{self.policy.min_reliability:.3f}"
+                f"{active_policy.min_reliability:.3f}"
             )
         elif (
-            self.policy.max_latency_ms is not None
+            active_policy.max_latency_ms is not None
             and average_latency is not None
-            and average_latency > self.policy.max_latency_ms
+            and average_latency > active_policy.max_latency_ms
         ):
             exclusion_reason = (
                 f"latency {average_latency:.1f}ms above maximum "
-                f"{self.policy.max_latency_ms:.1f}ms"
+                f"{active_policy.max_latency_ms:.1f}ms"
             )
         elif (
-            self.policy.max_cost_usd_per_attempt is not None
+            active_policy.max_cost_usd_per_attempt is not None
             and average_cost is not None
-            and average_cost > self.policy.max_cost_usd_per_attempt
+            and average_cost > active_policy.max_cost_usd_per_attempt
         ):
             exclusion_reason = (
                 f"average cost USD {average_cost:.8f} above maximum "
-                f"USD {self.policy.max_cost_usd_per_attempt:.8f}"
+                f"USD {active_policy.max_cost_usd_per_attempt:.8f}"
             )
 
-        rw, lw, qw, cw = self.policy.normalized_weights
+        rw, lw, qw, cw = active_policy.normalized_weights
         total = rw * reliability + lw * latency + qw * quality + cw * cost
         return RouteScore(
             route=route,
