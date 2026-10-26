@@ -56,3 +56,37 @@ __all__ = [
     "ModelUsageAggregate",
     "ModelUsageRecord",
 ]
+
+from core.models.policy_learning import (
+    DatasetBuildReport,
+    InMemoryPolicyLifecycleStore,
+    JsonFilePolicyLifecycleStore,
+    PolicyAuditEvent,
+    PolicyCandidateOutcome,
+    PolicyComparisonStats,
+    PolicyDatasetBuilder,
+    PolicyFeatureVector,
+    PolicyOptimizationConfig,
+    PolicyOptimizationProposal,
+    PolicyProposalStatus,
+    PolicyRevision,
+    PolicyTrainingSample,
+    RoutingPolicyOptimizer,
+)
+
+__all__ += [
+    "DatasetBuildReport",
+    "InMemoryPolicyLifecycleStore",
+    "JsonFilePolicyLifecycleStore",
+    "PolicyAuditEvent",
+    "PolicyCandidateOutcome",
+    "PolicyComparisonStats",
+    "PolicyDatasetBuilder",
+    "PolicyFeatureVector",
+    "PolicyOptimizationConfig",
+    "PolicyOptimizationProposal",
+    "PolicyProposalStatus",
+    "PolicyRevision",
+    "PolicyTrainingSample",
+    "RoutingPolicyOptimizer",
+]
