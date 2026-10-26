@@ -322,7 +322,7 @@ class ModelRouter:
                 completion_tokens=completion_tokens,
                 total_tokens=max(total_tokens, 0),
                 tokens_available=tokens_available,
-                latency_ms=max((ended_at - started_at) * 1000.0, 0.0),
+                latency_ms=round(max((ended_at - started_at) * 1000.0, 0.0), 6),
                 success=success,
                 fallback_used=fallback_used,
                 attempt=attempt,
