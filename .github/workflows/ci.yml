@@ -23,6 +23,7 @@ jobs:
           tests/test_policy_benchmark_cli.py
           tests/test_model_routing_benchmark.py
           tests/test_routing_feature_snapshot.py
+          tests/test_ingest_model_quality.py
           tests/test_model_adaptive.py
           tests/test_model_quality.py
           tests/test_model_router.py
