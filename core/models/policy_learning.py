@@ -606,12 +606,14 @@ class RoutingPolicyOptimizer:
         standard_error = (
             stdev(deltas) / math.sqrt(len(deltas))
             if len(deltas) >= 2
-            else float("inf")
+            else 1.0
         )
+        # With fewer than two paired validation observations, use the worst-case
+        # uncertainty bound so a policy can never pass statistical gates.
         lower_bound = (
             mean_uplift - self.config.confidence_z * standard_error
-            if math.isfinite(standard_error)
-            else float("-inf")
+            if len(deltas) >= 2
+            else -1.0
         )
         enough_data = (
             training_n >= self.config.min_training_samples
@@ -902,9 +904,10 @@ class RoutingPolicyOptimizer:
         if not stats.gate_eligible:
             return (
                 f"promotion blocked: uplift={stats.mean_uplift:.4f}, "
-                f"confidence_lower_bound={stats.confidence_lower_bound}, "
-                f"training={stats.training_samples}, validation={stats.validation_samples}; "
-                f"requires training>={stats.training_samples} and validation>={stats.validation_samples}"
+                f"confidence_lower_bound={stats.confidence_lower_bound:.4f}, "
+                f"training={stats.training_samples}/{self.config.min_training_samples}, "
+                f"validation={stats.validation_samples}/{self.config.min_validation_samples}; "
+                f"minimum uplift={self.config.min_mean_uplift:.4f}"
             )
         return "promotion blocked"
 
