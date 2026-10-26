@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,13 +27,37 @@ from core.models.policy_learning import (
 )
 
 
-def _load_feature_snapshot(path: Path) -> dict[tuple[str, str, ModelTask], PolicyFeatureVector]:
+def _parse_aware_timestamp(value: Any, field_name: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"feature snapshot '{field_name}' must be an ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"feature snapshot '{field_name}' must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"feature snapshot '{field_name}' must include a timezone")
+    return parsed
+
+
+def _load_feature_snapshot(
+    path: Path,
+    *,
+    evaluation_started_at: datetime,
+) -> dict[tuple[str, str, ModelTask], PolicyFeatureVector]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid feature snapshot JSON in {path}") from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise ValueError("feature snapshot must be a JSON object with schema_version=1")
+    if evaluation_started_at.tzinfo is None or evaluation_started_at.utcoffset() is None:
+        raise ValueError("evaluation run started_at must include a timezone")
+    snapshot_generated_at = _parse_aware_timestamp(payload.get("generated_at"), "generated_at")
+    if snapshot_generated_at >= evaluation_started_at:
+        raise ValueError(
+            "feature snapshot must be generated before the evaluation run starts; "
+            "use historical telemetry to avoid evaluation leakage"
+        )
     records = payload.get("features")
     if not isinstance(records, list):
         raise ValueError("feature snapshot 'features' must be a JSON array")
@@ -52,6 +77,18 @@ def _load_feature_snapshot(path: Path) -> dict[tuple[str, str, ModelTask], Polic
         key = (provider, model, task)
         if key in snapshot:
             raise ValueError(f"duplicate feature snapshot entry for {provider}/{model}/{task.value}")
+        quality_observed_at = _parse_aware_timestamp(
+            item.get("quality_last_observed_at"),
+            f"features[{index}].quality_last_observed_at",
+        )
+        if quality_observed_at > snapshot_generated_at:
+            raise ValueError(
+                f"feature entry {index}: quality profile timestamp is newer than the feature snapshot"
+            )
+        if quality_observed_at >= evaluation_started_at:
+            raise ValueError(
+                f"feature entry {index}: B42 quality evidence must predate the evaluation run"
+            )
 
         values: dict[str, float] = {}
         for name in ("reliability", "latency", "quality", "cost"):
@@ -130,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("policy store path must not overwrite either input file")
 
         run = load_evaluation_run(args.evaluation_run)
-        feature_snapshot = _load_feature_snapshot(args.features)
+        feature_snapshot = _load_feature_snapshot(\n            args.features, evaluation_started_at=run.started_at\n        )
         config = PolicyOptimizationConfig(
             min_training_samples=args.min_training_samples,
             min_validation_samples=args.min_validation_samples,
