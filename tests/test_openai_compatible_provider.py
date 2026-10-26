@@ -109,3 +109,18 @@ def test_environment_factory_rejects_unknown_routing_mode(monkeypatch):
     monkeypatch.setenv("MODEL_ROUTING_MODE", "unknown")
     with pytest.raises(ModelProviderConfigurationError):
         build_model_router_from_env()
+
+
+def test_environment_factory_wires_b43_policy_optimizer_in_adaptive_mode(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER_IDS", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_NAME", "primary")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_BASE_URL", "https://primary.example/v1")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_API_KEY", "primary-secret")
+    monkeypatch.setenv("MODEL_PROVIDER_PRIMARY_MODEL", "primary-model")
+    monkeypatch.setenv("MODEL_ROUTING_MODE", "adaptive")
+    monkeypatch.delenv("MODEL_ROUTING_POLICY_STORE_PATH", raising=False)
+    router = build_model_router_from_env()
+    assert router is not None
+    assert router.adaptive_engine is not None
+    assert router.adaptive_engine.policy_source is not None
+    assert router.adaptive_engine._policy_for(ModelTask.REASONING) == router.adaptive_engine.policy
