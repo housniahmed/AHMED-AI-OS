@@ -45,6 +45,10 @@ def test_benchmark_runner_evaluates_every_candidate_on_same_case():
     assert len(run.results) == 4
     assert report["logical_evaluation_calls"] == 4
     assert report["by_task"]["reasoning"]["benchmark_cases"] == 2
+    # The benchmark uses isolated in-memory health and usage stores.
+    assert router.usage_store.records() == ()
+    assert router.provider_status()["provider-a"].successes == 0
+    assert router.provider_status()["provider-b"].successes == 0
     for case_id in ("reasoning-001", "reasoning-002"):
         paired = [item for item in run.results if item.metadata["benchmark_case_id"] == case_id]
         assert {item.metadata["provider"] for item in paired} == {"provider-a", "provider-b"}
