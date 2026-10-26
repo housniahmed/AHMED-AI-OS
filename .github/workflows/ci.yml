@@ -20,6 +20,7 @@ jobs:
         run: >-
           pytest -q
           tests/test_model_policy_learning.py
+          tests/test_policy_benchmark_cli.py
           tests/test_model_adaptive.py
           tests/test_model_quality.py
           tests/test_model_router.py
