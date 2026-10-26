@@ -83,6 +83,12 @@ def test_dataset_builder_requires_paired_evaluation_groups_and_features():
             metrics=(MetricResult("quality", 1.0, True),),
             metadata={"provider": "p", "model": "solo", "task": "reasoning", "benchmark_case_id": "case-2"},
         ),
+        EvaluationResult(
+            case_id=__import__("uuid").uuid4(),
+            status=EvaluationStatus.PASSED,
+            metrics=(MetricResult("quality", 1.0, True),),
+            metadata={"provider": "p", "model": "unattributed", "task": "reasoning"},
+        ),
     ))
     report = PolicyDatasetBuilder.from_evaluation_run(
         run,
