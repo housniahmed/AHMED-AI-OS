@@ -113,4 +113,6 @@ B43 adjusts weights only. It does not bypass circuit breakers, route eligibility
 
 ### Benchmark-to-proposal workflow
 
-Use `core.evaluation.serialization.save_evaluation_run(...)` to export a B32 evaluation run, then run `python scripts/propose_routing_policy.py --evaluation-run ... --features ...` to create auditable B43 proposals from paired outcomes and an explicit normalized feature snapshot. The command is proposal-only and cannot approve or activate a policy. The full input schema and review procedure are documented in [B43_BENCHMARK_RUNBOOK.md](B43_BENCHMARK_RUNBOOK.md).
+The operational path consists of four steps: seed B42 from a **prior** attributed B32 run with `scripts/ingest_model_quality.py` if exact quality profiles are missing; freeze normalized historical B39/B40/B42 features with `scripts/build_routing_feature_snapshot.py`; run paired real-provider measurements with `scripts/run_model_routing_benchmark.py`; and create non-activating proposals with `scripts/propose_routing_policy.py`.
+
+The snapshot must predate the target benchmark, and every exact B42 quality profile must predate the run start. The proposal CLI checks these timestamps to reduce feature leakage. It never approves or activates a candidate. See [B43_BENCHMARK_RUNBOOK.md](B43_BENCHMARK_RUNBOOK.md) for the input schemas, commands, statistical gates, and review procedure.
