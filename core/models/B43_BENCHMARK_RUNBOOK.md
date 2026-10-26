@@ -6,7 +6,17 @@ This runbook connects historical B39/B40/B42 evidence to a real paired B32 evalu
 
 The feature snapshot **must be generated before the benchmark run starts**. This keeps runtime evidence and B42 quality profiles independent of the outcomes being evaluated. The B43 proposal CLI enforces this using the snapshot timestamp, evaluation-run timestamp, and each exact B42 profile timestamp.
 
-First, from the repository root install the project in your working environment with `python -m pip install -e .`. Make sure B40 usage telemetry exists for the models you want to compare, B42 has exact provider/model/task quality profiles based on prior evaluations, and `MODEL_PRICING_JSON` contains the relevant observed provider/model price definitions. Missing pricing or quality evidence is not replaced with a made-up value.
+First, from the repository root install the project in your working environment with `python -m pip install -e .`. Make sure B40 usage telemetry exists for the models you want to compare and `MODEL_PRICING_JSON` contains the relevant provider/model price definitions. Missing pricing or quality evidence is not replaced with a made-up value.
+
+If the exact B42 profiles do not yet exist, ingest an **older** attributed B32 run first:
+
+```bash
+python scripts/ingest_model_quality.py \
+  --evaluation-run artifacts/older-evaluation-run.json \
+  --quality-store data/model-quality.json
+```
+
+Use a prior run containing metric scores and explicit `provider`, `model`, and `task` metadata. The profile timestamps are set at ingestion time. Complete this before freezing features; never ingest the target benchmark and then use those profiles to evaluate that same run.
 
 The environment-based router now persists B39 provider health through `MODEL_HEALTH_STORE_PATH`. On a fresh installation, that health file may not exist yet; omit `--health-store` until it exists. Configure provider API credentials only through local environment variables.
 
