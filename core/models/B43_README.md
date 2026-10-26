@@ -1,93 +1,47 @@
 # B43 — Model Routing Learning & Policy Optimization
 
-B43 learns routing-policy weights offline from paired benchmark results, then subjects proposed changes to statistical gates and human approval.
+B43 learns routing-policy weights offline from paired benchmark results. It makes proposals, not autonomous policy changes.
 
-## Flow
+## Evidence flow
 
-`B32 EvaluationRun + B39/B40/B42 feature snapshot → paired samples → deterministic train/validation split → candidate weight search → uplift estimate → proposal → human approval → active revision`
+`historical B39/B40/B42 snapshot → paired B32 benchmark → train/validation split → candidate weight search → uplift and confidence gates → proposal → explicit human approval → policy revision`
 
-## Building a paired dataset
+Every evaluation result must contain explicit `provider`, `model`, `task`, metric scores, and one shared benchmark group identifier (`benchmark_case_id`, `dataset_case_id`, or `evaluation_group_id`). Each group must contain at least two candidate models evaluated on the same benchmark case. Missing evidence is skipped, never fabricated.
 
-Each relevant B32 result must include metadata:
+## 1. Freeze historical features before the benchmark
 
-- `provider`
-- `model`
-- `task`
-- one shared benchmark group identifier: `benchmark_case_id`, `dataset_case_id`, or `evaluation_group_id`
+Build a feature snapshot from observed B40 attempt telemetry and exact B42 quality profiles, optionally using current B39 provider health to exclude disabled/open-circuit providers:
 
-Each group must include at least two evaluated provider/model candidates on the same benchmark case. The caller supplies a feature resolver:
-
-```python
-report = PolicyDatasetBuilder.from_evaluation_run(
-    evaluation_run,
-    feature_resolver=lambda provider, model, task: PolicyFeatureVector(
-        reliability=...,
-        latency=...,
-        quality=...,
-        cost=...,
-    ),
-)
+```bash
+python scripts/build_routing_feature_snapshot.py \
+  --usage-store data/model-usage.json \
+  --quality-store data/model-quality.json \
+  --health-store data/model-health.json \
+  --output artifacts/routing-features.json
 ```
 
-Features are normalized [0,1]. In production, the resolver should use B39 health state, B40 latency/cost telemetry, and B42 evaluation-derived quality. B32 metric scores supply the outcome label; they are distinct from the B42 quality feature used by the policy.
+Only pass `--health-store` when that actual B39 file exists. The collector skips candidates with insufficient attempts, incomplete pricing, missing exact quality profiles, or unusable evidence; inspect its output diagnostics. Scores are normalized [0,1], higher-is-better. Reliability is observed successful attempts / all attempts. Latency and cost use explicit scales, and B42 quality is blended with the declared prior according to profile confidence.
 
-## Optimization and evaluation
+The snapshot and every exact B42 quality observation must predate the benchmark run. The B43 proposal CLI enforces the snapshot timestamp and B42 evidence timestamp against the B32 run start time to reduce evaluation leakage. Create and freeze the snapshot first; do not regenerate it after the run to evaluate that same run.
 
-The optimizer creates a small deterministic set of weight candidates from reliability-, latency-, quality-, cost-focused and balanced recipes blended with the baseline policy. Candidate selection happens on the training split; uplift is measured on the held-out validation split.
+## 2. Run a paired B32 benchmark
 
-A proposal is eligible only when all gates pass:
+Create a version 1 dataset JSON with real representative prompts, stable case IDs, and task-appropriate deterministic scoring criteria. The benchmark runner supports `required_terms`, `exact_answer`, and `json_fields`; these simple criteria are not universal quality measures.
 
-- minimum training count
-- minimum validation count
-- mean paired quality uplift at or above the configured threshold
-- lower confidence bound above zero
+Configure at least two routes per task, then run:
 
-The policy optimizer never auto-promotes a candidate. A good training score alone is insufficient.
-
-## Approval and rollback
-
-```python
-optimizer = RoutingPolicyOptimizer(...)
-proposal = optimizer.propose(ModelTask.REASONING, report.samples)
-
-# A pending proposal remains inactive until a human explicitly approves it.
-revision = optimizer.approve(
-    proposal.id,
-    approver="authorized-reviewer",
-    expected_revision=proposal.baseline_revision,
-    reason="Validated against held-out benchmark",
-)
-
-# Roll back by creating a new revision pointing at the previous policy.
-rollback_revision = optimizer.rollback(
-    ModelTask.REASONING,
-    actor="authorized-reviewer",
-    expected_revision=revision.revision,
-    reason="Quality regression detected",
-)
+```bash
+python scripts/run_model_routing_benchmark.py \
+  --dataset evals/my-benchmark.json \
+  --output artifacts/evaluation-run.json \
+  --limit-per-task 10
 ```
 
-Approval requires a named actor, a reason, and the expected active revision. Stale proposals are rejected. The caller must authenticate and authorize the actor; the supplied actor string is audit attribution, not authentication. Revisions, proposal state, and audit events can be persisted with `JsonFilePolicyLifecycleStore`.
+The default limit of 10 is a cost-conscious smoke run and usually does not satisfy promotion gates. Each case is submitted to each configured candidate route; requests can incur provider charges. The runner scores candidates separately instead of allowing adaptive arbitration to choose one, and saves actual results in the versioned B32 JSON format.
 
-## Runtime integration
+## 3. Propose a routing policy
 
-When `MODEL_ROUTING_MODE=adaptive`, the provider factory passes the optimizer to B41 as a policy source. B41 resolves the active policy per task. The default mode remains `priority`.
-
-## Safety and operational boundaries
-
-- Policy proposals are not active until explicit approval.
-- Hard constraints in the policy remain intact; the optimizer only searches weight combinations.
-- The B39 circuit breaker and fallback behavior remain in the router.
-- B43 does not execute tools or change B17/B18/B33 permissions/governance.
-- JSON persistence is single-process; use transactional storage with locking for multi-worker environments.
-
-## Operational benchmark workflow
-
-For live, paired measurements, configure at least two provider/model routes per task and run `scripts/run_model_routing_benchmark.py` against a version 1 dataset of real task prompts and deterministic scoring criteria. It tests each route independently rather than allowing the active adaptive policy to choose the winner. Requests go to configured external providers and may incur costs.
-
-The runner saves actual outputs and attribution in the versioned B32 evaluation-run format. Then `scripts/propose_routing_policy.py` reads that run plus an explicit normalized B39/B40/B42 feature snapshot and persists proposals. The complete workflow and scoring schema are in [B43 Benchmark Runbook](B43_BENCHMARK_RUNBOOK.md).
-
-B32 evaluation runs can be exported as versioned JSON with `save_evaluation_run(run, path)` from `core.evaluation.serialization`. From the repository root, the B43 CLI reads that real run plus an explicit normalized B39/B40/B42 feature snapshot and persists proposals:
+Use the frozen feature snapshot from step 1:
 
 ```bash
 python scripts/propose_routing_policy.py \
@@ -96,4 +50,32 @@ python scripts/propose_routing_policy.py \
   --store-path data/model-routing-policies.json
 ```
 
-The CLI reports per-task sample counts, skipped evidence, held-out uplift, confidence bounds, gate status, and candidate weights. It never activates a candidate. See [B43 Benchmark Runbook](B43_BENCHMARK_RUNBOOK.md) for the input schema, normalized feature semantics, review steps, and limitations. Synthetic fixtures in the integration tests verify the workflow only; they are not real model benchmark evidence.
+The command builds paired samples, records skipped evidence, applies the deterministic train/validation split, compares candidate weights on training data, and reports held-out uplift and confidence bounds. The dataset ID defaults to a SHA-256 fingerprint of the evaluation-run and feature files.
+
+Default gates require at least 20 training samples, 20 validation samples, mean held-out uplift of at least 0.02, and a 1.96 confidence multiplier. A proposal may stay `insufficient_evidence` when any gate fails. The CLI reports `"activation_performed": false` and never calls `approve()`.
+
+## Approval, revisions and rollback
+
+```python
+proposal = optimizer.propose(ModelTask.REASONING, report.samples)
+revision = optimizer.approve(
+    proposal.id,
+    approver="authorized-reviewer",
+    expected_revision=proposal.baseline_revision,
+    reason="Held-out benchmark reviewed",
+)
+rollback_revision = optimizer.rollback(
+    ModelTask.REASONING,
+    actor="authorized-reviewer",
+    expected_revision=revision.revision,
+    reason="Regression detected",
+)
+```
+
+The caller must authenticate and authorize the approver; the actor string itself is audit attribution, not authentication. Revision checks block stale promotion. Rollback creates a new revision pointing at the previous policy. The JSON store is single-process; multi-worker deployments need transactional persistence with locking or compare-and-swap.
+
+## Runtime and governance boundaries
+
+When `MODEL_ROUTING_MODE=adaptive`, B41 resolves the active task-specific B43 policy. Priority mode remains the default. The optimizer changes weights only; it does not bypass route hard constraints, B39 circuit breakers, tool permissions, B18 approvals, or B33 security controls.
+
+The benchmark runner and automated tests do not establish which real model is best until the workflow is run against configured external providers and a representative user-maintained dataset. Test fixtures use mock providers solely to verify wiring and non-activation behavior.
