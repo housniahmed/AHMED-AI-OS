@@ -119,9 +119,9 @@ class PolicyDatasetBuilder:
                 skipped += 1
                 reasons.append(f"result {result.case_id}: missing provider/model/task/benchmark group")
                 continue
-            if result.status is EvaluationStatus.ERROR or not result.metrics:
+            if result.status not in (EvaluationStatus.PASSED, EvaluationStatus.FAILED) or not result.metrics:
                 skipped += 1
-                reasons.append(f"result {result.case_id}: no usable metric outcome")
+                reasons.append(f"result {result.case_id}: no completed metric outcome")
                 continue
             try:
                 task = ModelTask(task_raw)
@@ -708,7 +708,7 @@ class RoutingPolicyOptimizer:
                     reason=stale.reason,
                 )
             )
-            raise RuntimeError("stale routing policy proposal; regenerate against the active revision")
+            raise PolicyRevisionConflict("stale routing policy proposal; regenerate against the active revision")
 
         revision = PolicyRevision(
             task=proposal.task,
@@ -777,7 +777,7 @@ class RoutingPolicyOptimizer:
         if active is None:
             raise LookupError(f"no active policy exists for task={task.value}")
         if active.revision != expected_revision:
-            raise RuntimeError("stale rollback request; active revision changed")
+            raise PolicyRevisionConflict("stale rollback request; active revision changed")
         previous = [
             item for item in self.store.revision_history(task)
             if item.revision < active.revision
