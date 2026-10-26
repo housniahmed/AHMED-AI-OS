@@ -1,6 +1,7 @@
 """Model routing, quality, and usage package."""
 
 from core.models.adaptive import (
+    AdaptivePolicySource,
     AdaptiveRoutingEngine,
     AdaptiveRoutingPolicy,
     InMemoryQualitySignalStore,
@@ -30,6 +31,7 @@ from core.models.usage import (
 )
 
 __all__ = [
+    "AdaptivePolicySource",
     "AdaptiveRoutingEngine",
     "AdaptiveRoutingPolicy",
     "InMemoryQualitySignalStore",
@@ -72,6 +74,7 @@ from core.models.policy_learning import (
     PolicyRevision,
     PolicyTrainingSample,
     RoutingPolicyOptimizer,
+    PolicyRevisionConflict,
 )
 
 __all__ += [
@@ -89,4 +92,5 @@ __all__ += [
     "PolicyRevision",
     "PolicyTrainingSample",
     "RoutingPolicyOptimizer",
+    "PolicyRevisionConflict",
 ]
