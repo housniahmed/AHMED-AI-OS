@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "name": "AHMED AI OS model-routing smoke benchmark",
+  "purpose": "Low-cost instruction-following and structured-output smoke test. Not a production quality benchmark.",
+  "cases": [
+    {
+      "id": "instruction-exact-token",
+      "name": "Follow an exact-output instruction",
+      "task": "reasoning",
+      "input": "Reply with exactly this one uppercase word and no punctuation: GREEN",
+      "expected": {
+        "kind": "exact_answer",
+        "answer": "GREEN"
+      },
+      "threshold": 1.0
+    },
+    {
+      "id": "governance-sequence",
+      "name": "Recall the governance stages",
+      "task": "reasoning",
+      "input": "Return the five AHMED AI OS governance stages, in order, using only these words separated by arrows: READ, ANALYZE, PREPARE, APPROVE, EXECUTE.",
+      "expected": {
+        "kind": "required_terms",
+        "terms": ["READ", "ANALYZE", "PREPARE", "APPROVE", "EXECUTE"]
+      },
+      "threshold": 1.0
+    },
+    {
+      "id": "simple-arithmetic-exact",
+      "name": "Answer a deterministic arithmetic check",
+      "task": "reasoning",
+      "input": "What is 19 + 23? Reply with only the numeric answer.",
+      "expected": {
+        "kind": "exact_answer",
+        "answer": "42"
+      },
+      "threshold": 1.0
+    },
+    {
+      "id": "json-status-priority",
+      "name": "Produce a structured JSON object",
+      "task": "reasoning",
+      "input": "Return only a valid JSON object with exactly these required key/value pairs: status is needs_review and priority is high.",
+      "expected": {
+        "kind": "json_fields",
+        "fields": {
+          "status": "needs_review",
+          "priority": "high"
+        }
+      },
+      "threshold": 1.0
+    },
+    {
+      "id": "extract-project-fields",
+      "name": "Extract known fields without changing values",
+      "task": "reasoning",
+      "input": "Extract the project details from this sentence and return only JSON: Project Atlas has owner Sara and deadline 2026-11-15. Include the keys owner and deadline.",
+      "expected": {
+        "kind": "json_fields",
+        "fields": {
+          "owner": "Sara",
+          "deadline": "2026-11-15"
+        }
+      },
+      "threshold": 1.0
+    },
+    {
+      "id": "required-facts",
+      "name": "Return two explicitly requested facts",
+      "task": "reasoning",
+      "input": "In one short sentence, identify the country and city in this statement: Casablanca is a city in Morocco.",
+      "expected": {
+        "kind": "required_terms",
+        "terms": ["Casablanca", "Morocco"]
+      },
+      "threshold": 1.0
+    }
+  ]
+}
