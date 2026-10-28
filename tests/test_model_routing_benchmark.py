@@ -1,7 +1,14 @@
+from pathlib import Path
+
+from core.evaluation.models import EvaluationCase
 from core.models.contracts import ModelTask
 from core.models.providers import StaticModelProvider
 from core.models.router import ModelRoute, ModelRouter
-from scripts.run_model_routing_benchmark import _build_evaluation_run
+from scripts.run_model_routing_benchmark import (
+    DeterministicBenchmarkMetric,
+    _build_evaluation_run,
+    _load_dataset,
+)
 
 
 def test_benchmark_runner_evaluates_every_candidate_on_same_case():
@@ -63,3 +70,33 @@ def test_benchmark_runner_evaluates_every_candidate_on_same_case():
     assert results_by_provider["provider-a"].metrics[0].score == 1.0
     assert results_by_provider["provider-b"].status.value == "failed"
     assert results_by_provider["provider-b"].metrics[0].score == 0.5
+
+
+
+def test_committed_smoke_dataset_is_valid_and_scoring_is_deterministic():
+    dataset_path = Path(__file__).resolve().parents[1] / "evals" / "model-routing-smoke.json"
+    cases = _load_dataset(dataset_path)
+    assert len(cases) == 6
+    assert len({case["id"] for case in cases}) == len(cases)
+    assert all(case["task"] is ModelTask.REASONING for case in cases)
+
+    metric = DeterministicBenchmarkMetric()
+    exact_case = EvaluationCase(
+        name="exact token",
+        input="test prompt",
+        expected={"kind": "exact_answer", "answer": "GREEN"},
+        metadata={"benchmark_threshold": 1.0},
+    )
+    result = metric.score(exact_case, "GREEN")
+    assert result.score == 1.0
+    assert result.passed is True
+
+    json_case = EvaluationCase(
+        name="structured fields",
+        input="test prompt",
+        expected={"kind": "json_fields", "fields": {"status": "needs_review", "priority": "high"}},
+        metadata={"benchmark_threshold": 1.0},
+    )
+    json_result = metric.score(json_case, '{"status":"needs_review","priority":"high"}')
+    assert json_result.score == 1.0
+    assert json_result.passed is True
