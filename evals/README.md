@@ -12,15 +12,18 @@ It is intentionally **not** a production model-quality benchmark:
 
 ## Run a smoke benchmark
 
-From the repository root after installing the project and configuring provider credentials and at least two routes for the `reasoning` task:
+From the repository root after installing the project and configuring provider credentials and at least two routes for the `reasoning` task, run the no-call preflight first:
 
 ```bash
 python scripts/run_model_routing_benchmark.py \
   --dataset evals/model-routing-smoke.json \
   --output artifacts/model-routing-smoke-run.json \
-  --limit-per-task 6
+  --limit-per-task 6 \
+  --dry-run
 ```
 
-This invokes the configured external model endpoints and may incur charges. The runner isolates health and usage state in memory so this test does not update production B39/B40 telemetry. Save the output locally; evaluation outputs may contain sensitive text.
+The preflight validates the dataset, credentials' presence, eligible routes, and expected logical request count. It sends **zero provider API requests** and does not write the output file. Inspect the candidate routes and count before proceeding.
+
+When the preflight succeeds, repeat the command without `--dry-run` to execute the benchmark. This invokes the configured external model endpoints and may incur charges; provider retries can increase billable attempts beyond the logical request count. The runner isolates health and usage state in memory so this test does not update production B39/B40 telemetry. Save the output locally; evaluation outputs may contain sensitive text.
 
 For B43 policy optimization, build an actual representative dataset with stable case IDs, justified scoring rules, and enough paired cases to pass the statistical gates. Generate the historical feature snapshot before the target benchmark, then pass the saved B32 run and frozen snapshot to `scripts/propose_routing_policy.py`. The proposal CLI never activates a candidate.
