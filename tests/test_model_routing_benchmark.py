@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from core.evaluation.models import EvaluationCase
@@ -8,6 +9,7 @@ from scripts.run_model_routing_benchmark import (
     DeterministicBenchmarkMetric,
     _build_evaluation_run,
     _load_dataset,
+    main,
 )
 
 
@@ -100,3 +102,45 @@ def test_committed_smoke_dataset_is_valid_and_scoring_is_deterministic():
     json_result = metric.score(json_case, '{"status":"needs_review","priority":"high"}')
     assert json_result.score == 1.0
     assert json_result.passed is True
+
+
+
+def test_benchmark_dry_run_validates_routes_without_calling_providers(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MODEL_PROVIDER_IDS", "alpha,beta")
+    monkeypatch.setenv("MODEL_ROUTING_MODE", "priority")
+    monkeypatch.setenv("MODEL_HEALTH_STORE_PATH", "")
+    monkeypatch.setenv("MODEL_USAGE_STORE_PATH", "")
+    monkeypatch.setenv("MODEL_PRICING_JSON", "")
+    for provider_id in ("ALPHA", "BETA"):
+        monkeypatch.setenv(f"MODEL_PROVIDER_{provider_id}_BASE_URL", "https://example.invalid/v1")
+        monkeypatch.setenv(f"MODEL_PROVIDER_{provider_id}_API_KEY", "test-only-not-a-real-key")
+        monkeypatch.setenv(f"MODEL_PROVIDER_{provider_id}_MODEL", f"{provider_id.lower()}-model")
+        monkeypatch.setenv(f"MODEL_PROVIDER_{provider_id}_TASKS", "reasoning")
+        monkeypatch.setenv(f"MODEL_PROVIDER_{provider_id}_PRIORITY", "100" if provider_id == "ALPHA" else "50")
+    for name in ("MODEL_PROVIDER_BASE_URL", "MODEL_PROVIDER_API_KEY", "MODEL_PROVIDER_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+
+    dataset_path = Path(__file__).resolve().parents[1] / "evals" / "model-routing-smoke.json"
+    output_path = tmp_path / "must-not-be-created.json"
+    exit_code = main(
+        [
+            "--dataset",
+            str(dataset_path),
+            "--output",
+            str(output_path),
+            "--limit-per-task",
+            "6",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["dry_run"] is True
+    assert report["execution_performed"] is False
+    assert report["api_requests_sent"] == 0
+    assert report["result_file_written"] is False
+    assert report["selected_case_count"] == 6
+    assert report["logical_model_requests"] == 12
+    assert len(report["by_task"]["reasoning"]["candidate_routes"]) == 2
+    assert not output_path.exists()
