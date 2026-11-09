@@ -72,6 +72,18 @@ Use a scoring method that actually matches the task. These simple metrics are no
 
 Configure at least two provider/model routes for each task in your dataset using the existing `MODEL_PROVIDER_*` or `MODEL_PROVIDER_IDS` environment settings. Set API credentials through environment variables, not committed files. Then run:
 
+First validate the setup without sending provider requests or creating an evaluation result:
+
+```bash
+python scripts/run_model_routing_benchmark.py \
+  --dataset evals/my-benchmark.json \
+  --output artifacts/evaluation-run.json \
+  --limit-per-task 10 \
+  --dry-run
+```
+
+The preflight checks the dataset, configured provider credentials, eligible routes, and expected logical request count. It sends zero API requests and does not write the result file. Inspect the route list and request count. Then execute the real benchmark by repeating the command without `--dry-run`:
+
 ```bash
 python scripts/run_model_routing_benchmark.py \
   --dataset evals/my-benchmark.json \
