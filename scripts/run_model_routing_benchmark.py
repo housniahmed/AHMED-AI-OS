@@ -302,6 +302,61 @@ def _build_evaluation_run(
     return run, {"summary": summary, "by_task": by_task, "logical_evaluation_calls": len(evaluation_cases)}
 
 
+def _build_dry_run_report(
+    router: ModelRouter,
+    dataset: list[dict[str, Any]],
+    *,
+    limit_per_task: int,
+    max_tokens: int,
+    temperature: float,
+) -> dict[str, Any]:
+    """Validate benchmark readiness without sending provider requests or writing results."""
+    tasks = {item["task"] for item in dataset}
+    candidates = _route_candidates(router, tasks)
+    by_task: dict[str, Any] = {}
+    logical_requests = 0
+    selected_case_count = 0
+
+    for task in sorted(tasks, key=lambda item: item.value):
+        routes = candidates.get(task, ())
+        if len(routes) < 2:
+            raise ValueError(
+                f"task={task.value} needs at least two configured provider/model routes; "
+                f"found {len(routes)}"
+            )
+        case_count = min(
+            sum(item["task"] == task for item in dataset),
+            limit_per_task,
+        )
+        request_count = case_count * len(routes)
+        selected_case_count += case_count
+        logical_requests += request_count
+        by_task[task.value] = {
+            "benchmark_cases": case_count,
+            "candidate_routes": [
+                {"provider": route.provider, "model": route.model}
+                for route in routes
+            ],
+            "logical_model_requests": request_count,
+        }
+
+    return {
+        "dry_run": True,
+        "execution_performed": False,
+        "api_requests_sent": 0,
+        "result_file_written": False,
+        "selected_case_count": selected_case_count,
+        "logical_model_requests": logical_requests,
+        "max_tokens_per_request": max_tokens,
+        "temperature": temperature,
+        "by_task": by_task,
+        "billing_note": (
+            "No provider request was sent. A real run may incur charges, and provider "
+            "retries can increase billable attempts beyond the logical request count."
+        ),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Execute a B32 benchmark against each configured route and save paired results."
@@ -311,6 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit-per-task", type=int, default=10, help="Maximum paired benchmark cases per task (default: 10)")
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--dry-run", action="store_true", help="Validate dataset and routes without calling providers or writing a result")
     return parser
 
 
@@ -332,6 +388,22 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(
                 "no model providers configured; set MODEL_PROVIDER_* or MODEL_PROVIDER_IDS environment variables"
             )
+        if args.dry_run:
+            report = _build_dry_run_report(
+                router,
+                dataset,
+                limit_per_task=args.limit_per_task,
+                max_tokens=args.max_tokens,
+                temperature=args.temperature,
+            )
+            output = {
+                "dataset_case_count": len(dataset),
+                "would_write_to": str(args.output),
+                **report,
+            }
+            print(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False))
+            return 0
+
         run, report = _build_evaluation_run(
             router,
             dataset,
