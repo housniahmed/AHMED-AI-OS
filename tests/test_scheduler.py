@@ -6,7 +6,10 @@ from core.scheduler.scheduler import Scheduler
 def test_due_once_schedule():
     now=datetime.now(timezone.utc)
     s=ScheduleDefinition("daily",TriggerType.TIME,uuid4(),kind=ScheduleKind.ONCE,run_at=now-timedelta(minutes=1))
-    assert Scheduler().due(now)==(s,)
+    sch=Scheduler()
+    assert sch.due(now)==()
+    sch.register(s)
+    assert sch.due(now)==(s,)
 
 def test_interval_must_not_be_faster_than_hour():
     try:
