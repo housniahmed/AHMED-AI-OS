@@ -1,0 +1,3 @@
+PRP-02B consolidation accepted: main b9828f8, Actions run 45848029379 completed success. Production remains NO-GO.
+
+C.1: filter provider candidates before fusion, reject conflicting identities, reject nonfinite scores, detach context metadata, deterministic context tie-break. New tests pending CI. Legacy unscoped queries remain supported; provider metadata is trusted, not independent authentication. Character budget is content-only, not serialized token budget. No new vector provider, temporal model, identity injection, benchmark or provider egress policy. Follow-up required before production.
