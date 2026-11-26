@@ -15,6 +15,12 @@ from integrations.model_providers.openai_compatible import build_model_router_fr
 
 app = FastAPI(title="AHMED AI OS API", version="0.1.0", description="API boundary for the personal AI operating system.")
 def build_system():
+    runtime_mode = os.getenv("AHMED_RUNTIME_BACKEND", "legacy")
+    if runtime_mode == "postgres":
+        from core.system.persistent_bootstrap import build_persistent_system
+        return build_persistent_system(build_model_router_from_env())
+    if runtime_mode != "legacy":
+        raise ValueError("unknown runtime backend")
     identity = None
     mode = os.getenv("AHMED_IDENTITY_BACKEND", "memory")
     if mode == "postgres":
@@ -301,10 +307,14 @@ def readiness():
         UUID(os.environ["AHMED_OWNER_ID"])
         if len(os.environ.get("AHMED_API_TOKEN", "")) < 32:
             raise ValueError("authentication missing")
+        if os.getenv("AHMED_RUNTIME_BACKEND") == "postgres":
+            from core.system.persistent_bootstrap import check_schema
+            check_schema(PostgresDatabase.from_env())
+            governance_service.unresolved()
         if not PostgresDatabase.from_env().check():
             raise RuntimeError("database unavailable")
     except Exception:
         raise HTTPException(503, "Infrastructure not ready")
     # Persistent services are not wired yet: never advertise production readiness.
     return {"status": "staging", "database_connected": True,
-            "production_ready": False, "storage": "mixed" if os.getenv("AHMED_IDENTITY_BACKEND") == "postgres" else "in-memory application services"}
+            "production_ready": False, "storage": "mixed" if os.getenv("AHMED_RUNTIME_BACKEND") == "postgres" or os.getenv("AHMED_IDENTITY_BACKEND") == "postgres" else "in-memory application services"}
