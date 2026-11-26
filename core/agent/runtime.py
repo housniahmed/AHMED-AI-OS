@@ -18,6 +18,9 @@ class ActionExecutor(ABC):
     def execute(self, action: AgentAction) -> Any:
         raise NotImplementedError
 
+    def prepare_approval(self, action: AgentAction, user_id: UUID | None = None) -> UUID | None:
+        return None
+
     def execute_for_user(self, action: AgentAction, user_id: UUID | None = None) -> Any:
         """Optional request-scoped execution hook; legacy executors remain valid."""
         return self.execute(action)
@@ -54,6 +57,16 @@ class AgentRuntime:
 
             if not proposals:
                 return state.transition(AgentPhase.COMPLETE, result=None)
+
+            # Never execute a partial mixed batch while waiting for approval.
+            if any(self.policy.approval_for(a) == ApprovalStatus.PENDING for a in proposals):
+                if hasattr(self.executor, "gateway"):
+                    if len(proposals) != 1:
+                        return state.transition(AgentPhase.FAILED, error="Approval requires a single action; split the request")
+                    request_id = self.executor.prepare_approval(proposals[0], user_id)
+                    if request_id is None:
+                        return state.transition(AgentPhase.FAILED, error="Unable to prepare authorized approval")
+                    return state.transition(AgentPhase.APPROVE, approval=ApprovalStatus.PENDING, result={"approval_request_id": str(request_id)})
 
             for action in proposals:
                 required = self.policy.approval_for(action)

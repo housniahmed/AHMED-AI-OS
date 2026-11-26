@@ -98,6 +98,7 @@ class ApprovalResponse(BaseModel):
     decision: str
     reason: str
     approver_id: UUID | None = None
+    action: dict | None = None
 
 
 class ApprovalInput(BaseModel):
@@ -223,6 +224,7 @@ def get_approval(request_id: UUID, owner: UUID = Depends(authenticated_owner)):
         return ApprovalResponse(
             request_id=req.id, decision=d.decision.value,
             reason=d.reason, approver_id=d.approver_id,
+            action={"name": req.action.name, "arguments": req.action.arguments, "level": req.action.action_level, "resource": req.action.resource},
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -242,3 +244,18 @@ def decide_approval(request_id: UUID, input: ApprovalInput, owner: UUID = Depend
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@app.post("/v1/governance/requests/{request_id}/resume", tags=["governance"])
+def resume_approval(request_id: UUID, owner: UUID = Depends(authenticated_owner)):
+    try:
+        require_owner(governance_service.get_request(request_id).user_id, owner)
+        result = system.gateway.resume(request_id, owner)
+        if not result.result.success:
+            raise HTTPException(409, "Execution denied or failed; do not retry automatically")
+        return {"request_id": request_id, "status": "completed", "output": result.result.output}
+    except KeyError as exc:
+        raise HTTPException(404, "Approval not found") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "Access denied") from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
