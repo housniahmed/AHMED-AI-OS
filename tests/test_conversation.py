@@ -24,12 +24,13 @@ class StubOrchestrator:
 def test_conversation_to_orchestrator():
     from core.agent.models import AgentState,AgentPhase
     from core.orchestration.models import OrchestrationState,OrchestrationResult
-    user=uuid4(); c=ConversationService(OrchestratorConversationProvider(
-        StubOrchestrator(OrchestrationResult(
+    user=uuid4()
+    orchestrator=StubOrchestrator(OrchestrationResult(
             request=None,state=OrchestrationState.COMPLETED,user_context=None,
             agent_state=AgentState("hello",phase=AgentPhase.COMPLETE,result="orchestrated")
         ))
-    )).create(user)
+    service=ConversationService(OrchestratorConversationProvider(orchestrator))
+    c=service.create(user)
     result=service.send(c.id,"hello")
     assert result.message.content=="orchestrated"
     assert result.provider_configured
