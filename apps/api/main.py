@@ -14,7 +14,18 @@ from core.system.bootstrap import SystemBootstrap
 from integrations.model_providers.openai_compatible import build_model_router_from_env
 
 app = FastAPI(title="AHMED AI OS API", version="0.1.0", description="API boundary for the personal AI operating system.")
-system = SystemBootstrap(model_router=build_model_router_from_env()).build()
+def build_system():
+    identity = None
+    mode = os.getenv("AHMED_IDENTITY_BACKEND", "memory")
+    if mode == "postgres":
+        from core.persistence.connection import PostgresDatabase
+        from core.persistence.identity_service import PostgresIdentityService
+        identity = PostgresIdentityService(PostgresDatabase.from_env(), UUID(os.environ["AHMED_OWNER_ID"]))
+    elif mode != "memory":
+        raise ValueError("unknown identity backend")
+    return SystemBootstrap(identity=identity, model_router=build_model_router_from_env()).build()
+
+system = build_system()
 identity_service = system.identity
 business_os = system.business
 conversation_service = system.conversations
@@ -274,4 +285,4 @@ def readiness():
         raise HTTPException(503, "Infrastructure not ready")
     # Persistent services are not wired yet: never advertise production readiness.
     return {"status": "staging", "database_connected": True,
-            "production_ready": False, "storage": "in-memory application services"}
+            "production_ready": False, "storage": "mixed" if os.getenv("AHMED_IDENTITY_BACKEND") == "postgres" else "in-memory application services"}
