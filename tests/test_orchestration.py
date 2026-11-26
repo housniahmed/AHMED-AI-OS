@@ -7,8 +7,8 @@ from core.orchestration.orchestrator import UnifiedOrchestrator
 
 class StubAgentRuntime:
     def __init__(self, state): self.state, self.calls = state, []
-    def run(self, request, approval=ApprovalStatus.NOT_REQUIRED):
-        self.calls.append((request, approval)); return self.state
+    def run(self, request, approval=ApprovalStatus.NOT_REQUIRED, *, user_id=None):
+        self.calls.append((request, approval, user_id)); return self.state
 
 class StubPlanning:
     def snapshot(self, project_id=None, goal_id=None, now=None): return {"project_id": project_id, "goal_id": goal_id}
@@ -30,7 +30,7 @@ def test_orchestrator_binds_identity_and_delegates():
     result = orchestrator.run(OrchestrationRequest(identity.user_id, "hello"))
     assert result.state == OrchestrationState.COMPLETED
     assert result.user_context.identity.user_id == identity.user_id
-    assert agent.calls == [("hello", ApprovalStatus.NOT_REQUIRED)]
+    assert agent.calls == [("hello", ApprovalStatus.NOT_REQUIRED, identity.user_id)]
     assert result.upcoming_events == ("upcoming",)
     assert result.overdue_events == ("overdue",)
 
@@ -41,7 +41,7 @@ def test_prepare_mode_does_not_forward_approval():
     result = orchestrator.run(OrchestrationRequest(identity.user_id, "send", execution_mode=ExecutionMode.PREPARE,
                                                     approval=ApprovalStatus.APPROVED))
     assert result.state == OrchestrationState.WAITING_APPROVAL
-    assert agent.calls == [("send", ApprovalStatus.NOT_REQUIRED)]
+    assert agent.calls == [("send", ApprovalStatus.NOT_REQUIRED, identity.user_id)]
 
 def test_unknown_user_fails_without_fabricating_context():
     service = UserContextService()

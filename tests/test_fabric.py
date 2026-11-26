@@ -12,12 +12,14 @@ def test_fabric_unifies_retrieval_and_graph():
     b = graph.add_entity(Entity("Goal", EntityType.GOAL))
     edge = graph.add_relationship(Relationship(a.id, b.id, RelationType.HAS_GOAL, confidence=.9))
     candidate = RetrievalCandidate(a.id, "project context", "project", "p1", "internal", fused_score=1.0)
-    retrieval = RetrievalResult(RetrievalQuery("project"), (candidate,))
+    goal_candidate = RetrievalCandidate(b.id, "goal context", "goal", "g1", "internal", fused_score=.8)
+    retrieval = RetrievalResult(RetrievalQuery("project"), (candidate, goal_candidate))
     item = ContextItem("project context", "project", "project", "p1", 1.0, "internal")
     context = StructuredContext("project", projects=(item,))
     fabric = KnowledgeFabricBuilder(graph).build(retrieval, context)
     assert fabric.query == "project"
     assert fabric.nodes[0].id == a.id
+    assert b.id in fabric.node_by_id
     assert any(e.source_id == a.id and e.target_id == b.id for e in fabric.edges)
 
 

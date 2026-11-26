@@ -47,6 +47,15 @@ class GatewayActionExecutor(ActionExecutor):
     def execute(self, action):
         raise RuntimeError("GatewayActionExecutor requires a user-scoped execution request.")
 
+    def prepare_approval(self, action, user_id=None):
+        from core.domain.models import ActionLevel
+        if user_id is None or self.gateway.governance is None or self.gateway.security is None:
+            return None
+        if ActionLevel(action.level) not in {ActionLevel.APPROVE, ActionLevel.EXECUTE}:
+            return None
+        result = self.gateway.execute(GatewayRequest(action=action, user_id=user_id))
+        return result.governance_request_id
+
     def execute_for_user(self, action, user_id: UUID | None = None) -> ToolResult:
         if user_id is None:
             raise ValueError("user_id is required for gateway execution")

@@ -18,3 +18,17 @@ def test_rejection_never_executes():
 def test_unknown_request_rejected():
     service=GovernanceService()
     with pytest.raises(KeyError): service.decide(uuid4(),ApprovalDecision.APPROVED,uuid4())
+
+
+def test_other_user_cannot_approve():
+    service=GovernanceService(); user=uuid4()
+    req=ApprovalRequest(GovernanceAction("send","send",RiskLevel.HIGH),user)
+    service.request(req)
+    with pytest.raises(PermissionError): service.decide(req.id,ApprovalDecision.APPROVED,uuid4())
+    assert not service.can_execute(req.id)
+
+def test_critical_requires_admin():
+    service=GovernanceService(); user=uuid4()
+    req=ApprovalRequest(GovernanceAction("delete","delete",RiskLevel.CRITICAL),user)
+    service.request(req)
+    with pytest.raises(PermissionError): service.decide(req.id,ApprovalDecision.APPROVED,user)

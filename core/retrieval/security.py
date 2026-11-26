@@ -11,4 +11,5 @@ def sensitivity_rank(value: str) -> int:
 
 def filter_by_sensitivity(candidates: list[RetrievalCandidate], query: RetrievalQuery) -> list[RetrievalCandidate]:
     maximum = sensitivity_rank(query.sensitivity_max)
-    return [c for c in candidates if c.sensitivity in SENSITIVITY_ORDER and sensitivity_rank(c.sensitivity) <= maximum]
+    return [c for c in candidates if c.sensitivity in SENSITIVITY_ORDER and sensitivity_rank(c.sensitivity) <= maximum
+            and (query.user_id is None or c.sensitivity == 'public' or str(c.metadata.get('user_id')) == str(query.user_id))]

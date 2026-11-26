@@ -36,8 +36,8 @@ class ScheduleDefinition:
     metadata: dict[str, Any] = field(default_factory=dict)
     def __post_init__(self) -> None:
         if not self.name.strip(): raise ValueError("schedule name cannot be empty")
-        if self.kind is ScheduleKind.ONCE and self.run_at is None: raise ValueError("once schedule requires run_at")
-        if self.kind is ScheduleKind.INTERVAL and (self.interval_seconds is None or self.interval_seconds < 3600):
+        if self.trigger_type is TriggerType.TIME and self.kind is ScheduleKind.ONCE and self.run_at is None: raise ValueError("once schedule requires run_at")
+        if self.trigger_type is TriggerType.TIME and self.kind is ScheduleKind.INTERVAL and (self.interval_seconds is None or self.interval_seconds < 3600):
             raise ValueError("interval schedule requires interval_seconds >= 3600")
         if self.trigger_type is TriggerType.EVENT and not self.event_name: raise ValueError("event trigger requires event_name")
         if self.trigger_type is TriggerType.CONDITION and not self.condition: raise ValueError("condition trigger requires condition")

@@ -34,7 +34,7 @@ class KnowledgeFabricBuilder:
             )
             nodes.setdefault(node.id, node)
 
-        for item in context.all_items():
+        for item in context.items:
             node = FabricNode(
                 id=self._stable_id(item.source_type, item.source_id),
                 kind=item.kind,

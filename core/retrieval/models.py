@@ -13,6 +13,7 @@ class RetrievalQuery:
     memory_types: tuple[str, ...] = ()
     sensitivity_max: str = "restricted"
     project_id: UUID | None = None
+    user_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip():

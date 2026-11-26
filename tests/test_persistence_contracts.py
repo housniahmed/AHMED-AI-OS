@@ -41,5 +41,8 @@ def test_planning_repository_writes_project_and_goal_links():
     project = Project("Persist project", goal_ids=[goal_id])
     repo = PostgresPlanningRepository(connection, context_id)
     assert repo.save_project(project) == project
-    assert len(connection.cursor_obj.statements) == 2
-    assert "project_goals" in connection.cursor_obj.statements[1][0]
+    assert len(connection.cursor_obj.statements) == 3
+    assert "INSERT INTO projects" in connection.cursor_obj.statements[0][0]
+    assert connection.cursor_obj.statements[1] == ("DELETE FROM project_goals WHERE project_id=%s", (str(project.id),))
+    assert "INSERT INTO project_goals" in connection.cursor_obj.statements[2][0]
+    assert connection.cursor_obj.statements[2][1] == (str(project.id), str(goal_id))

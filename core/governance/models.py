@@ -9,7 +9,7 @@ class ApprovalScope(str,Enum): ACTION="action"; RESOURCE="resource"; WORKFLOW="w
 class ApprovalDecision(str,Enum): PENDING="pending"; APPROVED="approved"; REJECTED="rejected"; EXPIRED="expired"
 @dataclass(frozen=True,slots=True)
 class GovernanceAction:
-    name:str; resource:str; risk:RiskLevel=RiskLevel.MEDIUM; arguments:dict[str,Any]=field(default_factory=dict); id:UUID=field(default_factory=uuid4)
+    name:str; resource:str; risk:RiskLevel=RiskLevel.MEDIUM; arguments:dict[str,Any]=field(default_factory=dict); id:UUID=field(default_factory=uuid4); tool_id:UUID|None=None; action_level:str|None=None
 @dataclass(frozen=True,slots=True)
 class ApprovalRequest:
     action:GovernanceAction; user_id:UUID; scope:ApprovalScope=ApprovalScope.ACTION; id:UUID=field(default_factory=uuid4)

@@ -18,6 +18,9 @@ class ActionExecutor(ABC):
     def execute(self, action: AgentAction) -> Any:
         raise NotImplementedError
 
+    def prepare_approval(self, action: AgentAction, user_id: UUID | None = None) -> UUID | None:
+        return None
+
     def execute_for_user(self, action: AgentAction, user_id: UUID | None = None) -> Any:
         """Optional request-scoped execution hook; legacy executors remain valid."""
         return self.execute(action)
@@ -45,7 +48,7 @@ class AgentRuntime:
             user_id: UUID | None = None) -> AgentState:
         state = AgentState(request=request)
         try:
-            retrieval = self.retrieval.retrieve(RetrievalQuery(text=request))
+            retrieval = self.retrieval.retrieve(RetrievalQuery(text=request, user_id=user_id))
             structured = self.context.build(retrieval)
             state = state.transition(AgentPhase.INFER, context=structured)
 
@@ -55,6 +58,16 @@ class AgentRuntime:
             if not proposals:
                 return state.transition(AgentPhase.COMPLETE, result=None)
 
+            # Never execute a partial mixed batch while waiting for approval.
+            if any(self.policy.approval_for(a) == ApprovalStatus.PENDING for a in proposals):
+                if hasattr(self.executor, "gateway"):
+                    if len(proposals) != 1:
+                        return state.transition(AgentPhase.FAILED, error="Approval requires a single action; split the request")
+                    request_id = self.executor.prepare_approval(proposals[0], user_id)
+                    if request_id is None:
+                        return state.transition(AgentPhase.FAILED, error="Unable to prepare authorized approval")
+                    return state.transition(AgentPhase.APPROVE, approval=ApprovalStatus.PENDING, result={"approval_request_id": str(request_id)})
+
             for action in proposals:
                 required = self.policy.approval_for(action)
                 if required == ApprovalStatus.PENDING and approval != ApprovalStatus.APPROVED:
@@ -63,6 +76,9 @@ class AgentRuntime:
                     return state.transition(AgentPhase.APPROVE, approval=ApprovalStatus.REJECTED)
 
             results = [self.executor.execute_for_user(action, user_id) for action in proposals]
+            from core.tools.models import ToolResult
+            if any(isinstance(result, ToolResult) and not result.success for result in results):
+                return state.transition(AgentPhase.FAILED, result=results, error='Tool execution denied or failed')
             return state.transition(AgentPhase.EXECUTE, approval=approval, result=results).transition(AgentPhase.COMPLETE)
         except Exception as exc:
             return state.transition(AgentPhase.FAILED, error=str(exc))

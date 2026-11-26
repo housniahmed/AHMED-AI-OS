@@ -43,7 +43,8 @@ def test_unknown_tool_is_rejected():
     assert result.tool_call is None
 
 def test_batch_preserves_order():
-    gateway = make_gateway()
+    gateway = make_gateway(ActionLevel.PREPARE)
     requests = tuple(GatewayRequest(AgentAction("send", str(i), "prepare", {"value": i}), uuid4()) for i in range(3))
     results = gateway.execute_many(requests)
+    assert all(r.result.success for r in results)
     assert [r.result.output for r in results] == [{"ok": 0}, {"ok": 1}, {"ok": 2}]
