@@ -51,7 +51,7 @@ jobs:
           python-version: "3.12"
       - run: pip install '.[postgres]'
       - run: pytest -q tests/test_postgres_memory_integration.py tests/test_postgres_governance_integration.py
-      - run: pytest -q tests/test_migrations_rls.py tests/test_postgres_identity_service.py tests/test_persistent_memory_service.py tests/test_durable_governance_service.py tests/test_durable_gateway.py
+      - run: pytest -q tests/test_migrations_rls.py tests/test_postgres_identity_service.py tests/test_persistent_memory_service.py tests/test_durable_governance_service.py tests/test_durable_gateway.py tests/test_persistent_bootstrap.py
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -80,7 +80,7 @@ jobs:
         run: |
           set -eu
           trap 'docker compose logs; docker compose down -v' EXIT
-          printf 'AHMED_OWNER_ID=00000000-0000-4000-8000-000000000001\nAHMED_API_TOKEN=ci-only-token-000000000000000000000000000000\n' > .env.api
+          printf 'AHMED_RUNTIME_BACKEND=postgres\nAHMED_OWNER_ID=00000000-0000-4000-8000-000000000001\nAHMED_API_TOKEN=ci-only-token-000000000000000000000000000000\n' > .env.api
           docker compose up -d --wait postgres
           docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -v ON_ERROR_STOP=1 -c "CREATE ROLE ahmed_runtime LOGIN PASSWORD 'ci-runtime-password'"
           docker compose run --rm migrate
