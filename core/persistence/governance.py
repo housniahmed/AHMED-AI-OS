@@ -21,7 +21,7 @@ class PostgresApprovalLedger:
         if action.tool_id is None or action.action_level not in {"approve","execute"}:
             raise ValueError("invalid tool binding")
         payload = json.dumps(dict(name=action.name, resource=action.resource,
-            risk=action.risk.value, arguments=action.arguments, tool_id=str(action.tool_id),
+            risk=action.risk.value, arguments=action.arguments, action_id=str(action.id), tool_id=str(action.tool_id),
             action_level=action.action_level), allow_nan=False)
         with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("""INSERT INTO approval_ledger(id,owner_id,payload,expires_at)
