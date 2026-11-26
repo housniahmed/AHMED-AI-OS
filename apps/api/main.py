@@ -23,7 +23,18 @@ def build_system():
         identity = PostgresIdentityService(PostgresDatabase.from_env(), UUID(os.environ["AHMED_OWNER_ID"]))
     elif mode != "memory":
         raise ValueError("unknown identity backend")
-    return SystemBootstrap(identity=identity, model_router=build_model_router_from_env()).build()
+    retrieval = None
+    memory_mode = os.getenv("AHMED_MEMORY_BACKEND", "disabled")
+    if memory_mode == "postgres":
+        if mode != "postgres":
+            raise ValueError("persistent memory requires persistent identity")
+        from core.persistence.memory_service import PersistentMemoryService, PostgresMemoryRetriever
+        from core.retrieval.engine import HybridRetrievalEngine
+        from core.system.bootstrap import EmptyRetriever
+        retrieval = HybridRetrievalEngine(PostgresMemoryRetriever(PersistentMemoryService(identity.database, identity.owner_id)), EmptyRetriever(), EmptyRetriever())
+    elif memory_mode != "disabled":
+        raise ValueError("unknown memory backend")
+    return SystemBootstrap(identity=identity, retrieval=retrieval, model_router=build_model_router_from_env()).build()
 
 system = build_system()
 identity_service = system.identity
