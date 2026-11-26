@@ -139,6 +139,8 @@ def create_conversation(request: ConversationCreateRequest):
             conversation_id=c.id, user_id=c.user_id, title=c.title,
             status=c.status.value, message_count=0,
         )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -189,8 +191,7 @@ def send_message(conversation_id: UUID, request: MessageRequest):
 def get_approval(request_id: UUID):
     try:
         req = governance_service.get_request(request_id)
-        decisions = [d for d in governance_service.sink.decisions if d.request_id == request_id]
-        d = decisions[-1]
+        d = governance_service.latest(request_id)
         return ApprovalResponse(
             request_id=req.id, decision=d.decision.value,
             reason=d.reason, approver_id=d.approver_id,
