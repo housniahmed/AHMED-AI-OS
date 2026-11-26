@@ -67,3 +67,36 @@ jobs:
           curl -fsS http://127.0.0.1:8000/health
           test "$(docker exec ahmed-ci id -u)" = 10001
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ready)" = 503
+
+  compose:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-disposable-password
+      MIGRATION_DATABASE_URL: postgresql://ahmed:ci-disposable-password@postgres:5432/ahmed_ai_os
+      RUNTIME_DATABASE_URL: postgresql://ahmed_runtime:ci-runtime-password@postgres:5432/ahmed_ai_os
+    steps:
+      - uses: actions/checkout@v4
+      - name: Integrated staging smoke
+        run: |
+          set -eu
+          trap 'docker compose logs; docker compose down -v' EXIT
+          printf 'AHMED_OWNER_ID=00000000-0000-4000-8000-000000000001\nAHMED_API_TOKEN=ci-only-token-000000000000000000000000000000\n' > .env.api
+          docker compose up -d --wait postgres
+          docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -v ON_ERROR_STOP=1 -c "CREATE ROLE ahmed_runtime LOGIN PASSWORD 'ci-runtime-password'"
+          docker compose run --rm migrate
+          docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -v ON_ERROR_STOP=1 < database/runtime_grants.sql
+          docker compose up -d --wait api
+          curl -fsS http://127.0.0.1:8000/ready | python -c 'import json,sys; d=json.load(sys.stdin); assert d["database_connected"] and not d["production_ready"]'
+          docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -v ON_ERROR_STOP=1 -c "INSERT INTO user_context(id) VALUES ('00000000-0000-4000-8000-000000000001')"
+          docker compose restart postgres
+          docker compose up -d --wait postgres
+          test "$(docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -Atc "SELECT count(*) FROM user_context WHERE id='00000000-0000-4000-8000-000000000001'")" = 1
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install '.[postgres]' pip-audit
+      - run: pip-audit --local --skip-editable
