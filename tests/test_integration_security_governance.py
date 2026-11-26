@@ -34,6 +34,7 @@ def test_gateway_requires_security_and_governance():
     approved=gateway.execute(GatewayRequest(action,user,ApprovalStatus.APPROVED,governance_request_id=pending.governance_request_id))
     assert approved.result.success
     assert approved.result.output=={"ok":7}
+    assert not gateway.execute(GatewayRequest(action,user,ApprovalStatus.APPROVED,governance_request_id=pending.governance_request_id)).result.success
 
 def test_gateway_denies_without_security():
     gateway,governance,user=make()
@@ -53,3 +54,10 @@ def test_governance_approval_cannot_authorize_changed_arguments():
     result=gateway.execute(GatewayRequest(changed,user,ApprovalStatus.APPROVED,governance_request_id=pending.governance_request_id))
     assert not result.result.success
     assert "does not match" in result.result.error
+
+
+def test_prepare_cannot_invoke_execute_tool_even_with_approval():
+    gateway,governance,user=make()
+    result=gateway.execute(GatewayRequest(AgentAction("send","send","prepare",{"value":7}),user,ApprovalStatus.APPROVED))
+    assert not result.result.success
+    assert "does not permit" in result.result.error

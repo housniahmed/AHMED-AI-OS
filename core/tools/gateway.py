@@ -1,6 +1,7 @@
 """Controlled execution boundary with Security and Governance integration."""
 from __future__ import annotations
 from dataclasses import dataclass, field
+from copy import deepcopy
 from uuid import UUID, uuid4
 from core.agent.models import AgentAction, ApprovalStatus
 from core.domain.models import ActionLevel
@@ -45,7 +46,7 @@ class ToolExecutionGateway:
             governance_id=request.governance_request_id
             if self.governance is not None and ActionLevel(action.level) in {ActionLevel.APPROVE,ActionLevel.EXECUTE}:
                 if governance_id is None:
-                    pending=self.governance.request(ApprovalRequest(GovernanceAction(action.name,spec.name,RiskLevel.HIGH,dict(action.arguments)),request.user_id))
+                    pending=self.governance.request(ApprovalRequest(GovernanceAction(action.name,spec.name,RiskLevel.HIGH,deepcopy(action.arguments)),request.user_id))
                     return self._failure(request,"human approval required",pending.request_id)
                 approved_request = self.governance.get_request(governance_id)
                 if (approved_request.user_id != request.user_id
@@ -55,6 +56,10 @@ class ToolExecutionGateway:
                     return self._failure(request,"governance approval does not match action or user",governance_id)
                 if not self.governance.can_execute(governance_id):
                     return self._failure(request,"governance approval not granted",governance_id)
+                if request.approval != ApprovalStatus.APPROVED:
+                    return self._failure(request,"explicit execution approval required",governance_id)
+                if not self.governance.consume(governance_id):
+                    return self._failure(request,"approval expired or consumed",governance_id)
             call=ToolCall(tool_name=spec.name,arguments=dict(action.arguments))
             result=self.runtime.execute(call,approved=request.approval==ApprovalStatus.APPROVED)
             return GatewayResult(request.id,call,result,governance_id)
@@ -69,7 +74,7 @@ class ToolExecutionGateway:
         try: requested=ActionLevel(action_level)
         except ValueError: return False
         rank={ActionLevel.READ:0,ActionLevel.ANALYZE:1,ActionLevel.PREPARE:2,ActionLevel.APPROVE:3,ActionLevel.EXECUTE:4}
-        return rank[requested] <= rank[tool_level]
+        return rank[requested] == rank[tool_level]
 
     @staticmethod
     def _failure(request:GatewayRequest,error:str,governance_request_id:UUID|None=None)->GatewayResult:

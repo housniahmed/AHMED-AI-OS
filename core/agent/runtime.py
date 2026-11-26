@@ -45,7 +45,7 @@ class AgentRuntime:
             user_id: UUID | None = None) -> AgentState:
         state = AgentState(request=request)
         try:
-            retrieval = self.retrieval.retrieve(RetrievalQuery(text=request))
+            retrieval = self.retrieval.retrieve(RetrievalQuery(text=request, user_id=user_id))
             structured = self.context.build(retrieval)
             state = state.transition(AgentPhase.INFER, context=structured)
 
@@ -63,6 +63,9 @@ class AgentRuntime:
                     return state.transition(AgentPhase.APPROVE, approval=ApprovalStatus.REJECTED)
 
             results = [self.executor.execute_for_user(action, user_id) for action in proposals]
+            from core.tools.models import ToolResult
+            if any(isinstance(result, ToolResult) and not result.success for result in results):
+                return state.transition(AgentPhase.FAILED, result=results, error='Tool execution denied or failed')
             return state.transition(AgentPhase.EXECUTE, approval=approval, result=results).transition(AgentPhase.COMPLETE)
         except Exception as exc:
             return state.transition(AgentPhase.FAILED, error=str(exc))

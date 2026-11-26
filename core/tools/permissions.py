@@ -15,6 +15,6 @@ class ToolPermissionPolicy:
     def authorize(self, spec: ToolSpec, approved: bool = False) -> bool:
         if spec.name not in self.allowed_tools:
             return False
-        if spec.action_level == ActionLevel.EXECUTE and not approved:
+        if spec.action_level in {ActionLevel.APPROVE, ActionLevel.EXECUTE} and not approved:
             return False
         return True
