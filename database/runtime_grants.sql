@@ -11,3 +11,7 @@ GRANT USAGE ON SEQUENCE approval_events_event_id_seq TO ahmed_runtime;
 
 GRANT SELECT ON schema_migrations TO ahmed_runtime;
 GRANT SELECT, INSERT, UPDATE ON security_permissions TO ahmed_runtime;
+
+GRANT SELECT, INSERT ON conversations, conversation_messages TO ahmed_runtime;
+GRANT UPDATE (updated_at) ON conversations TO ahmed_runtime;
+GRANT USAGE ON SEQUENCE conversation_messages_seq_seq TO ahmed_runtime;
