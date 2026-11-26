@@ -45,15 +45,21 @@ class AgentRuntime:
         self.policy = policy or PermissionPolicy()
 
     def run(self, request: str, approval: ApprovalStatus = ApprovalStatus.NOT_REQUIRED,
-            user_id: UUID | None = None) -> AgentState:
+            user_id: UUID | None = None, conversation_history=()) -> AgentState:
         state = AgentState(request=request)
         try:
             retrieval = self.retrieval.retrieve(RetrievalQuery(text=request, user_id=user_id))
             structured = self.context.build(retrieval)
+            if conversation_history:
+                from dataclasses import replace
+                structured = replace(structured, conversation_history=conversation_history)
             state = state.transition(AgentPhase.INFER, context=structured)
 
             observations, proposals = self.planner.infer(request, structured)
             state = state.transition(AgentPhase.PROPOSE, observations=observations, proposals=proposals)
+
+            if conversation_history and proposals:
+                return state.transition(AgentPhase.FAILED, error='History-assisted requests cannot execute or prepare tools; submit a fresh standalone request')
 
             if not proposals:
                 return state.transition(AgentPhase.COMPLETE, result=None)
