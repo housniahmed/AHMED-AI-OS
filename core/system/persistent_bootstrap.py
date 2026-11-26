@@ -18,6 +18,18 @@ def check_schema(db,root=Path("database")):
         cur.execute("SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user")
         if cur.fetchone() != (False,False):
             raise RuntimeError("privileged runtime role forbidden")
+        cur.execute("""SELECT EXISTS (SELECT 1 FROM pg_roles
+            WHERE rolname<>current_user AND pg_has_role(current_user,oid,'MEMBER')
+            AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb))""")
+        if cur.fetchone()[0]:
+            raise RuntimeError("privileged role membership forbidden")
+        cur.execute("""SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relname=ANY(%s)
+            AND c.relrowsecurity AND c.relforcerowsecurity
+            AND NOT pg_has_role(current_user,c.relowner,'MEMBER')""",
+            (['user_context','memories','goals','projects','approval_ledger','approval_events','security_permissions'],))
+        if cur.fetchone()[0]!=7:
+            raise RuntimeError("runtime table ownership or RLS configuration unsafe")
         cur.execute("SELECT version,checksum FROM schema_migrations")
         if dict(cur.fetchall()) != expected:
             raise RuntimeError("incompatible database migrations")
