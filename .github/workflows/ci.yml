@@ -51,7 +51,7 @@ jobs:
           python-version: "3.12"
       - run: pip install '.[postgres]'
       - run: pytest -q tests/test_postgres_memory_integration.py tests/test_postgres_governance_integration.py
-      - run: pytest -q tests/test_migrations_rls.py tests/test_postgres_identity_service.py tests/test_persistent_memory_service.py
+      - run: pytest -q tests/test_migrations_rls.py tests/test_postgres_identity_service.py tests/test_persistent_memory_service.py tests/test_durable_governance_service.py
   docker:
     runs-on: ubuntu-latest
     steps:
