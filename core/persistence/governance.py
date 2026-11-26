@@ -23,7 +23,7 @@ class PostgresApprovalLedger:
         payload = json.dumps(dict(name=action.name, resource=action.resource,
             risk=action.risk.value, arguments=action.arguments, tool_id=str(action.tool_id),
             action_level=action.action_level), allow_nan=False)
-        with self.database.transaction() as conn, conn.cursor() as cur:
+        with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("""INSERT INTO approval_ledger(id,owner_id,payload,expires_at)
                 VALUES (%s,%s,%s::jsonb,clock_timestamp()+%s*interval '1 second')""",
                 (request.id,self.owner_id,payload,ttl_seconds))
@@ -34,7 +34,7 @@ class PostgresApprovalLedger:
         if type(approved) is not bool:
             raise ValueError("explicit boolean decision required")
         state = "approved" if approved else "rejected"
-        with self.database.transaction() as conn, conn.cursor() as cur:
+        with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("""UPDATE approval_ledger SET state=%s,approver_id=%s
                 WHERE id=%s AND owner_id=%s AND state='pending'
                 AND expires_at>clock_timestamp()
@@ -47,7 +47,7 @@ class PostgresApprovalLedger:
 
     def claim(self, request_id):
         """Return immutable stored payload only after a successful committed claim."""
-        with self.database.transaction() as conn, conn.cursor() as cur:
+        with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("""UPDATE approval_ledger SET state='executing',claimed_at=clock_timestamp()
                 WHERE id=%s AND owner_id=%s AND state='approved'
                 AND expires_at>clock_timestamp() RETURNING payload""",(request_id,self.owner_id))
@@ -61,7 +61,7 @@ class PostgresApprovalLedger:
         if type(success) is not bool:
             raise ValueError("explicit boolean result required")
         state = "succeeded" if success else "uncertain"
-        with self.database.transaction() as conn, conn.cursor() as cur:
+        with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("""UPDATE approval_ledger SET state=%s,finished_at=clock_timestamp(),receipt=%s::jsonb
                 WHERE id=%s AND owner_id=%s AND state='executing' RETURNING id""",
                 (state,json.dumps(receipt,allow_nan=False),request_id,self.owner_id))
@@ -71,7 +71,7 @@ class PostgresApprovalLedger:
         return True
 
     def get(self, request_id):
-        with self.database.transaction() as conn, conn.cursor() as cur:
+        with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("""SELECT state,payload,expires_at,claimed_at,finished_at,receipt
                 FROM approval_ledger WHERE id=%s AND owner_id=%s""",(request_id,self.owner_id))
             row=cur.fetchone()
@@ -79,6 +79,6 @@ class PostgresApprovalLedger:
 
     def unresolved(self):
         """Report ambiguous attempts; never requeue them automatically."""
-        with self.database.transaction() as conn, conn.cursor() as cur:
+        with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("SELECT id,state FROM approval_ledger WHERE owner_id=%s AND state IN ('executing','uncertain') ORDER BY claimed_at",(self.owner_id,))
             return cur.fetchall()
