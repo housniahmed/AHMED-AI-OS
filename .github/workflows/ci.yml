@@ -95,6 +95,17 @@ jobs:
           docker compose restart api
           docker compose up -d --wait api
           curl -fsS -H 'Authorization: Bearer ci-only-token-000000000000000000000000000000' http://127.0.0.1:8000/v1/users/00000000-0000-4000-8000-000000000001/context
+          docker compose stop postgres
+          test "$(curl --max-time 20 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ready)" = 503
+          docker compose up -d --wait postgres
+          curl -fsS http://127.0.0.1:8000/ready
+          docker compose exec -T postgres pg_dump -U ahmed -Fc ahmed_ai_os > /tmp/ahmed-ci.dump
+          docker compose exec -T postgres createdb -U ahmed recovery_ci
+          docker compose exec -T postgres pg_restore -U ahmed --exit-on-error -d recovery_ci < /tmp/ahmed-ci.dump
+          test "$(docker compose exec -T postgres psql -U ahmed -d recovery_ci -Atc "SELECT count(*) FROM user_context WHERE id='00000000-0000-4000-8000-000000000001'")" = 1
+          docker compose exec -T postgres psql -U ahmed -d recovery_ci -v ON_ERROR_STOP=1 -c "UPDATE schema_migrations SET checksum='invalid' WHERE version='001'"
+          if docker compose run --rm --no-deps -e DATABASE_URL=postgresql://ahmed_runtime:ci-runtime-password@postgres:5432/recovery_ci api python -c 'from core.system.persistent_bootstrap import check_schema; from core.persistence.connection import PostgresDatabase; check_schema(PostgresDatabase.from_env())' > /tmp/schema-negative.log 2>&1; then exit 1; fi
+          grep -q 'incompatible database migrations' /tmp/schema-negative.log
           docker compose restart postgres
           docker compose up -d --wait postgres
           test "$(docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -Atc "SELECT count(*) FROM user_context WHERE id='00000000-0000-4000-8000-000000000001'")" = 1
