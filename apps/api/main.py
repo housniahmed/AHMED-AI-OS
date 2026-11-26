@@ -34,7 +34,16 @@ def build_system():
         retrieval = HybridRetrievalEngine(PostgresMemoryRetriever(PersistentMemoryService(identity.database, identity.owner_id)), EmptyRetriever(), EmptyRetriever())
     elif memory_mode != "disabled":
         raise ValueError("unknown memory backend")
-    return SystemBootstrap(identity=identity, retrieval=retrieval, model_router=build_model_router_from_env()).build()
+    governance = None
+    governance_mode = os.getenv("AHMED_GOVERNANCE_BACKEND", "memory")
+    if governance_mode == "postgres":
+        if mode != "postgres":
+            raise ValueError("durable governance requires persistent identity")
+        from core.persistence.governance_service import DurableGovernanceService
+        governance = DurableGovernanceService(identity.database, identity.owner_id)
+    elif governance_mode != "memory":
+        raise ValueError("unknown governance backend")
+    return SystemBootstrap(identity=identity, retrieval=retrieval, governance=governance, model_router=build_model_router_from_env()).build()
 
 system = build_system()
 identity_service = system.identity
@@ -264,6 +273,8 @@ def decide_approval(request_id: UUID, input: ApprovalInput, owner: UUID = Depend
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, "Access denied") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
