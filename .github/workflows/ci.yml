@@ -55,7 +55,7 @@ jobs:
       - name: Process recovery under runtime role
         run: |
           python -c "import os,psycopg; c=psycopg.connect(os.environ['TEST_DATABASE_URL'],autocommit=True); c.execute(\"ALTER ROLE ahmed_runtime LOGIN PASSWORD 'ci-runtime-password'\"); c.execute(open('database/runtime_grants.sql').read())"
-          TEST_RUNTIME_DATABASE_URL=postgresql://ahmed_runtime:ci-runtime-password@localhost:5432/test_os pytest -q tests/test_process_recovery.py
+          TEST_RUNTIME_DATABASE_URL=postgresql://ahmed_runtime:ci-runtime-password@localhost:5432/test_os pytest -q tests/test_process_recovery.py tests/test_approval_transitions.py
   docker:
     runs-on: ubuntu-latest
     steps:
