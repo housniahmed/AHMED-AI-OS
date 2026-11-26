@@ -18,8 +18,17 @@ class OrchestratorConversationProvider(ConversationProvider):
     def __init__(self, orchestrator):
         self.orchestrator=orchestrator
     def respond(self, conversation: Conversation, user_message: Message) -> str:
+        history=[]
+        remaining=8000
+        for msg in reversed(conversation.messages[-21:]):
+            if msg.id==user_message.id or msg.role not in (MessageRole.USER,MessageRole.ASSISTANT):
+                continue
+            if len(history)>=20 or len(msg.content)>remaining:
+                break
+            history.append((msg.role.value,msg.content))
+            remaining-=len(msg.content)
         result: OrchestrationResult=self.orchestrator.run(
-            OrchestrationRequest(user_id=conversation.user_id,text=user_message.content)
+            OrchestrationRequest(user_id=conversation.user_id,text=user_message.content,conversation_history=tuple(reversed(history)))
         )
         if result.state.value=="failed":
             raise RuntimeError(result.error or "Orchestration failed.")
@@ -27,6 +36,8 @@ class OrchestratorConversationProvider(ConversationProvider):
             return "This request requires human approval before execution. " + str(result.agent_state.result if result.agent_state else "")
         if result.agent_state is not None and result.agent_state.result is not None:
             return str(result.agent_state.result)
+        if result.agent_state is not None and result.agent_state.observations:
+            return "\n".join(result.agent_state.observations)
         return "Request processed by the orchestration layer."
 
 class ConversationService:

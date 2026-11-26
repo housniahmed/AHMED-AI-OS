@@ -42,6 +42,7 @@ class UnifiedOrchestrator:
                 request.text,
                 approval=self._effective_approval(request),
                 user_id=request.user_id,
+                **({'conversation_history': request.conversation_history} if request.conversation_history else {}),
             )
             if agent_state.phase.value == "approve":
                 state = OrchestrationState.WAITING_APPROVAL

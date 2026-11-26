@@ -31,6 +31,7 @@ class StructuredContext:
     projects: tuple[ContextItem, ...] = ()
     procedures: tuple[ContextItem, ...] = ()
     truncated: bool = False
+    conversation_history: tuple[tuple[str, str], ...] = ()
 
     @property
     def items(self) -> tuple[ContextItem, ...]:

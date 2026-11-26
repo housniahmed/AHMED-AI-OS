@@ -18,14 +18,16 @@ class PostgresConversationService:
             cur.execute("INSERT INTO conversations(id,owner_id,title) VALUES (%s,%s,%s)",(cid,user_id,title.strip()))
         return self.get(cid)
 
-    def get(self,conversation_id):
+    def get(self,conversation_id, *, recent=False):
         with self.database.transaction(self.owner_id) as conn, conn.cursor() as cur:
             cur.execute("SELECT title,status,created_at,updated_at FROM conversations WHERE id=%s AND owner_id=%s",(conversation_id,self.owner_id))
             row=cur.fetchone()
             if row is None:
                 raise KeyError("Conversation not found.")
-            cur.execute("SELECT id,role,content,created_at FROM conversation_messages WHERE conversation_id=%s AND owner_id=%s ORDER BY seq",(conversation_id,self.owner_id))
+            cur.execute("SELECT id,role,content,created_at FROM conversation_messages WHERE conversation_id=%s AND owner_id=%s "+("ORDER BY seq DESC LIMIT 21" if recent else "ORDER BY seq"),(conversation_id,self.owner_id))
             messages=[Message(MessageRole(role),content,id=mid,created_at=at) for mid,role,content,at in cur.fetchall()]
+        if recent:
+            messages.reverse()
         return Conversation(self.owner_id,row[0],id=conversation_id,status=ConversationStatus(row[1]),messages=messages,created_at=row[2],updated_at=row[3])
 
     def history(self,conversation_id):
@@ -43,6 +45,6 @@ class PostgresConversationService:
         self._append(conversation_id,msg)
         if self._provider is None:
             return ConversationReply(conversation_id,msg,False,"accepted_pending_provider")
-        reply=Message(MessageRole.ASSISTANT,self._provider.respond(self.get(conversation_id),msg))
+        reply=Message(MessageRole.ASSISTANT,self._provider.respond(self.get(conversation_id,recent=True),msg))
         self._append(conversation_id,reply)
         return ConversationReply(conversation_id,reply,True,"completed")
