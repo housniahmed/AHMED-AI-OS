@@ -3,6 +3,8 @@ import hashlib
 import os
 from pathlib import Path
 from uuid import UUID
+from core.persistence.conversation_service import PostgresConversationService
+from core.conversation.service import OrchestratorConversationProvider
 from core.system.bootstrap import SystemBootstrap, EmptyRetriever
 from core.persistence.connection import PostgresDatabase
 from core.persistence.identity_service import PostgresIdentityService
@@ -27,8 +29,8 @@ def check_schema(db,root=Path("database")):
             WHERE n.nspname='public' AND c.relname=ANY(%s)
             AND c.relrowsecurity AND c.relforcerowsecurity
             AND NOT pg_has_role(current_user,c.relowner,'MEMBER')""",
-            (['user_context','memories','goals','projects','approval_ledger','approval_events','security_permissions'],))
-        if cur.fetchone()[0]!=7:
+            (['user_context','memories','goals','projects','approval_ledger','approval_events','security_permissions','conversations','conversation_messages'],))
+        if cur.fetchone()[0]!=9:
             raise RuntimeError("runtime table ownership or RLS configuration unsafe")
         cur.execute("SELECT version,checksum FROM schema_migrations")
         if dict(cur.fetchall()) != expected:
@@ -47,5 +49,7 @@ def build_persistent_system(model_router=None):
     # Inspect unresolved claims without retrying or mutating them.
     governance.unresolved()
     retrieval=HybridRetrievalEngine(PostgresMemoryRetriever(memory),EmptyRetriever(),EmptyRetriever())
-    return SystemBootstrap(identity=identity,retrieval=retrieval,governance=governance,
+    system=SystemBootstrap(identity=identity,retrieval=retrieval,governance=governance,
         security=security,model_router=model_router).build()
+    system.conversations=PostgresConversationService(db,owner,OrchestratorConversationProvider(system.orchestrator))
+    return system
