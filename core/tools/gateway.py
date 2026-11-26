@@ -46,12 +46,14 @@ class ToolExecutionGateway:
             governance_id=request.governance_request_id
             if self.governance is not None and ActionLevel(action.level) in {ActionLevel.APPROVE,ActionLevel.EXECUTE}:
                 if governance_id is None:
-                    pending=self.governance.request(ApprovalRequest(GovernanceAction(action.name,spec.name,RiskLevel.HIGH,deepcopy(action.arguments)),request.user_id))
+                    pending=self.governance.request(ApprovalRequest(GovernanceAction(action.name,spec.name,RiskLevel.HIGH,deepcopy(action.arguments),tool_id=spec.id,action_level=spec.action_level.value),request.user_id))
                     return self._failure(request,"human approval required",pending.request_id)
                 approved_request = self.governance.get_request(governance_id)
                 if (approved_request.user_id != request.user_id
                         or approved_request.action.name != action.name
                         or approved_request.action.resource != spec.name
+                        or approved_request.action.tool_id != spec.id
+                        or approved_request.action.action_level != spec.action_level.value
                         or approved_request.action.arguments != action.arguments):
                     return self._failure(request,"governance approval does not match action or user",governance_id)
                 if not self.governance.can_execute(governance_id):
@@ -65,6 +67,19 @@ class ToolExecutionGateway:
             return GatewayResult(request.id,call,result,governance_id)
         except Exception as exc:
             return self._failure(request,str(exc),request.governance_request_id)
+
+    def resume(self, request_id: UUID, user_id: UUID) -> GatewayResult:
+        """Resume only the stored action; no planner or client arguments."""
+        if self.governance is None or self.security is None:
+            raise PermissionError("secure resume requires security and governance")
+        stored = self.governance.get_request(request_id)
+        if stored.user_id != user_id:
+            raise PermissionError("approval owner mismatch")
+        if stored.action.action_level not in {"approve", "execute"} or stored.action.tool_id is None:
+            raise ValueError("request is not a resumable tool proposal")
+        action = AgentAction(stored.action.name, "Approved stored action",
+                             stored.action.action_level, deepcopy(stored.action.arguments))
+        return self.execute(GatewayRequest(action, user_id, ApprovalStatus.APPROVED, request_id))
 
     def execute_many(self,requests:tuple[GatewayRequest,...])->tuple[GatewayResult,...]:
         return tuple(self.execute(r) for r in requests)
