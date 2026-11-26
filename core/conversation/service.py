@@ -24,7 +24,7 @@ class OrchestratorConversationProvider(ConversationProvider):
         if result.state.value=="failed":
             raise RuntimeError(result.error or "Orchestration failed.")
         if result.state.value=="waiting_approval":
-            return "This request requires human approval before execution."
+            return "This request requires human approval before execution. " + str(result.agent_state.result if result.agent_state else "")
         if result.agent_state is not None and result.agent_state.result is not None:
             return str(result.agent_state.result)
         return "Request processed by the orchestration layer."
