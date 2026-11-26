@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from math import isfinite
+
 from core.context.models import ContextItem, StructuredContext
 from core.retrieval.models import RetrievalResult
 from core.retrieval.security import filter_by_sensitivity
@@ -22,7 +25,8 @@ class ContextEngine:
 
     def build(self, result: RetrievalResult) -> StructuredContext:
         candidates = filter_by_sensitivity(list(result.candidates), result.query)
-        candidates = sorted(candidates, key=lambda item: item.fused_score, reverse=True)
+        candidates = [c for c in candidates if isfinite(c.fused_score)]
+        candidates = sorted(candidates, key=lambda item: (-item.fused_score, str(item.id)))
 
         selected: list[ContextItem] = []
         seen: set[tuple[str, str, str]] = set()
@@ -43,7 +47,7 @@ class ContextEngine:
                 source_id=candidate.source_id,
                 relevance=candidate.fused_score,
                 sensitivity=candidate.sensitivity,
-                metadata=candidate.metadata,
+                metadata=deepcopy(candidate.metadata),
             )
             cost = len(content)
             if used + cost > self.max_chars:
