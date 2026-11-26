@@ -45,46 +45,30 @@ class HybridRetrievalEngine:
         self.metadata = metadata
 
     def retrieve(self, query: RetrievalQuery) -> RetrievalResult:
-        lexical = self.lexical.search(query)
-        semantic = self.semantic.search(query)
-        metadata = self.metadata.search(query)
-
-        by_id: dict = {}
-        for candidate in lexical:
-            by_id[candidate.id] = candidate
-        for candidate in semantic:
-            existing = by_id.get(candidate.id)
-            if existing:
-                by_id[candidate.id] = RetrievalCandidate(
-                    id=existing.id,
-                    content=existing.content,
-                    source_type=existing.source_type,
-                    source_id=existing.source_id,
-                    sensitivity=existing.sensitivity,
-                    lexical_score=existing.lexical_score,
-                    semantic_score=candidate.semantic_score,
-                    metadata_score=existing.metadata_score,
-                    metadata=existing.metadata,
-                )
-            else:
-                by_id[candidate.id] = candidate
-        for candidate in metadata:
-            existing = by_id.get(candidate.id)
-            if existing:
-                by_id[candidate.id] = RetrievalCandidate(
-                    id=existing.id,
-                    content=existing.content,
-                    source_type=existing.source_type,
-                    source_id=existing.source_id,
-                    sensitivity=existing.sensitivity,
-                    lexical_score=existing.lexical_score,
-                    semantic_score=existing.semantic_score,
-                    metadata_score=candidate.metadata_score,
-                    metadata=existing.metadata,
-                )
-            else:
-                by_id[candidate.id] = candidate
-
-        candidates = filter_by_sensitivity(list(by_id.values()), query)
-        ranked = fuse_scores(candidates)
-        return RetrievalResult(query=query, candidates=tuple(ranked[: query.top_k]))
+        from dataclasses import replace
+        from math import isfinite
+        by_id = {}
+        conflicts = set()
+        for provider, signal in ((self.lexical, "lexical_score"),
+                                 (self.semantic, "semantic_score"),
+                                 (self.metadata, "metadata_score")):
+            for candidate in filter_by_sensitivity(provider.search(query), query):
+                score = getattr(candidate, signal)
+                if not isfinite(score) or candidate.id in conflicts:
+                    continue
+                existing = by_id.get(candidate.id)
+                if existing is not None:
+                    if (existing.content, existing.source_type, existing.source_id,
+                        existing.sensitivity, existing.metadata) != (
+                        candidate.content, candidate.source_type, candidate.source_id,
+                        candidate.sensitivity, candidate.metadata):
+                        conflicts.add(candidate.id)
+                        del by_id[candidate.id]
+                        continue
+                    by_id[candidate.id] = replace(existing, **{signal: max(getattr(existing, signal), score)})
+                else:
+                    by_id[candidate.id] = replace(candidate, lexical_score=0.0,
+                        semantic_score=0.0, metadata_score=0.0, fused_score=0.0)
+                    by_id[candidate.id] = replace(by_id[candidate.id], **{signal: score})
+        ranked = fuse_scores(list(by_id.values()))
+        return RetrievalResult(query=query, candidates=tuple(ranked[:query.top_k]))
