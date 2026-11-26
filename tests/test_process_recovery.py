@@ -53,6 +53,7 @@ else:
         raise AssertionError('crash handler not reached')
     else:
         assert s.governance.ledger.get(a)['state']=='succeeded'
+        assert s.governance.ledger.get(a)['receipt']=={'call_id':str(a),'success':True}
         assert s.governance.ledger.get(b)['state']=='executing'
         assert (b,'executing') in s.governance.unresolved()
         assert not s.gateway.resume(a,owner).result.success
