@@ -259,3 +259,19 @@ def resume_approval(request_id: UUID, owner: UUID = Depends(authenticated_owner)
         raise HTTPException(403, "Access denied") from exc
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@app.get("/ready", tags=["system"])
+def readiness():
+    from core.persistence.connection import PostgresDatabase
+    try:
+        UUID(os.environ["AHMED_OWNER_ID"])
+        if len(os.environ.get("AHMED_API_TOKEN", "")) < 32:
+            raise ValueError("authentication missing")
+        if not PostgresDatabase.from_env().check():
+            raise RuntimeError("database unavailable")
+    except Exception:
+        raise HTTPException(503, "Infrastructure not ready")
+    # Persistent services are not wired yet: never advertise production readiness.
+    return {"status": "staging", "database_connected": True,
+            "production_ready": False, "storage": "in-memory application services"}
