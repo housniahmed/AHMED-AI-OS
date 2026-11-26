@@ -47,6 +47,12 @@ class ToolExecutionGateway:
                 if governance_id is None:
                     pending=self.governance.request(ApprovalRequest(GovernanceAction(action.name,spec.name,RiskLevel.HIGH,dict(action.arguments)),request.user_id))
                     return self._failure(request,"human approval required",pending.request_id)
+                approved_request = self.governance.get_request(governance_id)
+                if (approved_request.user_id != request.user_id
+                        or approved_request.action.name != action.name
+                        or approved_request.action.resource != spec.name
+                        or approved_request.action.arguments != action.arguments):
+                    return self._failure(request,"governance approval does not match action or user",governance_id)
                 if not self.governance.can_execute(governance_id):
                     return self._failure(request,"governance approval not granted",governance_id)
             call=ToolCall(tool_name=spec.name,arguments=dict(action.arguments))
