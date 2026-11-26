@@ -13,9 +13,13 @@ class PostgresDatabase:
         return cls(os.environ.get("DATABASE_URL", ""))
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, owner_id=None):
         import psycopg
         with psycopg.connect(self._dsn, connect_timeout=5) as connection:
+            if owner_id is not None:
+                from uuid import UUID
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT set_config('app.owner_id', %s, true)", (str(UUID(str(owner_id))),))
             yield connection
 
     def check(self):
