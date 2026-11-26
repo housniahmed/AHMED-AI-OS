@@ -1,7 +1,10 @@
 """FastAPI entry point for AHMED AI OS."""
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import os
+import secrets
 from pydantic import BaseModel, Field
 from uuid import UUID, uuid4
 
@@ -19,6 +22,24 @@ observability = system.observability
 security_service = system.security
 governance_service = system.governance
 
+
+bearer = HTTPBearer(auto_error=False)
+
+def authenticated_owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> UUID:
+    token = os.getenv("AHMED_API_TOKEN", "")
+    owner = os.getenv("AHMED_OWNER_ID", "")
+    if len(token) < 32 or not owner:
+        raise HTTPException(503, "API authentication not configured")
+    if credentials is None or not secrets.compare_digest(credentials.credentials.encode(), token.encode()):
+        raise HTTPException(401, "Authentication required")
+    try:
+        return UUID(owner)
+    except ValueError:
+        raise HTTPException(503, "API owner not configured")
+
+def require_owner(user_id: UUID, owner: UUID):
+    if user_id != owner:
+        raise HTTPException(403, "Resource access denied")
 
 class HealthResponse(BaseModel):
     status: str
@@ -91,10 +112,10 @@ def health():
 
 
 @app.post("/v1/users", response_model=UserResponse, status_code=201, tags=["identity"])
-def create_user(request: UserCreateRequest):
+def create_user(request: UserCreateRequest, owner: UUID = Depends(authenticated_owner)):
     try:
         identity = UserIdentity(
-            user_id=uuid4(), display_name=request.display_name, email=request.email,
+            user_id=owner, display_name=request.display_name, email=request.email,
             timezone=request.timezone, locale=request.locale,
         )
         i = identity_service.create(identity).identity
@@ -107,7 +128,8 @@ def create_user(request: UserCreateRequest):
 
 
 @app.get("/v1/users/{user_id}/context", tags=["identity"])
-def get_context(user_id: UUID):
+def get_context(user_id: UUID, owner: UUID = Depends(authenticated_owner)):
+    require_owner(user_id, owner)
     try:
         return identity_service.snapshot(user_id)
     except KeyError as exc:
@@ -117,7 +139,8 @@ def get_context(user_id: UUID):
 
 
 @app.patch("/v1/users/{user_id}/profile", tags=["identity"])
-def update_profile(user_id: UUID, request: ContextUpdateRequest):
+def update_profile(user_id: UUID, request: ContextUpdateRequest, owner: UUID = Depends(authenticated_owner)):
+    require_owner(user_id, owner)
     try:
         return identity_service.update_profile(user_id, request.values)
     except KeyError as exc:
@@ -127,12 +150,13 @@ def update_profile(user_id: UUID, request: ContextUpdateRequest):
 
 
 @app.get("/v1/business/snapshot", tags=["business"])
-def business_snapshot():
+def business_snapshot(owner: UUID = Depends(authenticated_owner)):
     return business_os.snapshot()
 
 
 @app.post("/v1/conversations", response_model=ConversationResponse, status_code=201, tags=["conversation"])
-def create_conversation(request: ConversationCreateRequest):
+def create_conversation(request: ConversationCreateRequest, owner: UUID = Depends(authenticated_owner)):
+    require_owner(request.user_id, owner)
     try:
         c = conversation_service.create(request.user_id, request.title)
         return ConversationResponse(
@@ -146,9 +170,10 @@ def create_conversation(request: ConversationCreateRequest):
 
 
 @app.get("/v1/conversations/{conversation_id}", response_model=ConversationResponse, tags=["conversation"])
-def get_conversation(conversation_id: UUID):
+def get_conversation(conversation_id: UUID, owner: UUID = Depends(authenticated_owner)):
     try:
         c = conversation_service.get(conversation_id)
+        require_owner(c.user_id, owner)
         return ConversationResponse(
             conversation_id=c.id, user_id=c.user_id, title=c.title,
             status=c.status.value, message_count=len(c.messages),
@@ -158,17 +183,19 @@ def get_conversation(conversation_id: UUID):
 
 
 @app.get("/v1/conversations/{conversation_id}/messages", tags=["conversation"])
-def get_messages(conversation_id: UUID):
+def get_messages(conversation_id: UUID, owner: UUID = Depends(authenticated_owner)):
     try:
+        require_owner(conversation_service.get(conversation_id).user_id, owner)
         return conversation_service.history(conversation_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/v1/conversations/{conversation_id}/messages", response_model=MessageResponse, tags=["conversation"])
-def send_message(conversation_id: UUID, request: MessageRequest):
+def send_message(conversation_id: UUID, request: MessageRequest, owner: UUID = Depends(authenticated_owner)):
     trace = observability.start_trace()
     try:
+        require_owner(conversation_service.get(conversation_id).user_id, owner)
         r = conversation_service.send(conversation_id, request.content)
         observability.end_trace(trace, success=True)
         return MessageResponse(
@@ -188,9 +215,10 @@ def send_message(conversation_id: UUID, request: MessageRequest):
 
 
 @app.get("/v1/governance/requests/{request_id}", response_model=ApprovalResponse, tags=["governance"])
-def get_approval(request_id: UUID):
+def get_approval(request_id: UUID, owner: UUID = Depends(authenticated_owner)):
     try:
         req = governance_service.get_request(request_id)
+        require_owner(req.user_id, owner)
         d = governance_service.latest(request_id)
         return ApprovalResponse(
             request_id=req.id, decision=d.decision.value,
@@ -201,9 +229,11 @@ def get_approval(request_id: UUID):
 
 
 @app.post("/v1/governance/requests/{request_id}/decision", response_model=ApprovalResponse, tags=["governance"])
-def decide_approval(request_id: UUID, input: ApprovalInput):
+def decide_approval(request_id: UUID, input: ApprovalInput, owner: UUID = Depends(authenticated_owner)):
     try:
-        d = governance_service.decide(request_id, input.decision, input.approver_id, reason=input.reason)
+        require_owner(governance_service.get_request(request_id).user_id, owner)
+        require_owner(input.approver_id, owner)
+        d = governance_service.decide(request_id, input.decision, owner, reason=input.reason)
         return ApprovalResponse(
             request_id=d.request_id, decision=d.decision.value,
             reason=d.reason, approver_id=d.approver_id,
