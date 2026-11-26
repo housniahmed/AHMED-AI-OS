@@ -52,6 +52,10 @@ jobs:
       - run: pip install '.[postgres]'
       - run: pytest -q tests/test_postgres_memory_integration.py tests/test_postgres_governance_integration.py
       - run: pytest -q tests/test_migrations_rls.py tests/test_postgres_identity_service.py tests/test_persistent_memory_service.py tests/test_durable_governance_service.py tests/test_durable_gateway.py tests/test_persistent_bootstrap.py
+      - name: Process recovery under runtime role
+        run: |
+          python -c "import os,psycopg; c=psycopg.connect(os.environ['TEST_DATABASE_URL'],autocommit=True); c.execute(\"ALTER ROLE ahmed_runtime LOGIN PASSWORD 'ci-runtime-password'\"); c.execute(open('database/runtime_grants.sql').read())"
+          TEST_RUNTIME_DATABASE_URL=postgresql://ahmed_runtime:ci-runtime-password@localhost:5432/test_os pytest -q tests/test_process_recovery.py
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -88,6 +92,9 @@ jobs:
           docker compose up -d --wait api
           curl -fsS http://127.0.0.1:8000/ready | python -c 'import json,sys; d=json.load(sys.stdin); assert d["database_connected"] and not d["production_ready"]'
           docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -v ON_ERROR_STOP=1 -c "INSERT INTO user_context(id) VALUES ('00000000-0000-4000-8000-000000000001')"
+          docker compose restart api
+          docker compose up -d --wait api
+          curl -fsS -H 'Authorization: Bearer ci-only-token-000000000000000000000000000000' http://127.0.0.1:8000/v1/users/00000000-0000-4000-8000-000000000001/context
           docker compose restart postgres
           docker compose up -d --wait postgres
           test "$(docker compose exec -T postgres psql -U ahmed -d ahmed_ai_os -Atc "SELECT count(*) FROM user_context WHERE id='00000000-0000-4000-8000-000000000001'")" = 1
