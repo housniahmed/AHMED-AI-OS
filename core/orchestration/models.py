@@ -30,6 +30,8 @@ class OrchestrationRequest:
     metadata: dict[str, Any] = field(default_factory=dict)
     id: UUID = field(default_factory=uuid4)
 
+    conversation_history: tuple[tuple[str, str], ...] = ()
+
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ValueError("orchestration request text cannot be empty")
