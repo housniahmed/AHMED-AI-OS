@@ -11,6 +11,7 @@ from core.security.models import AccessLevel, SecurityAction, SecurityPrincipal
 from core.security.service import SecurityService
 from core.governance.models import ApprovalDecision, ApprovalRequest, GovernanceAction, RiskLevel
 from core.governance.service import GovernanceService
+from core.persistence.governance_service import DurableGovernanceService
 
 @dataclass(frozen=True, slots=True)
 class GatewayRequest:
@@ -34,7 +35,8 @@ class ToolExecutionGateway:
         self.runtime=runtime; self.security=security; self.governance=governance
 
     def execute(self, request: GatewayRequest) -> GatewayResult:
-        action=request.action
+        action=deepcopy(request.action)
+        durable=isinstance(self.governance, DurableGovernanceService)
         try:
             spec=self.runtime.registry.get(action.name)
             if not self._level_allowed(action.level,spec.action_level):
@@ -44,6 +46,8 @@ class ToolExecutionGateway:
                 decision=self.security.authorize(SecurityPrincipal(request.user_id),SecurityAction(spec.name,"execute",required))
                 if not decision.allowed: return self._failure(request,decision.reason)
             governance_id=request.governance_request_id
+            if durable and self.security is None:
+                return self._failure(request,"durable execution requires security",governance_id)
             if self.governance is not None and ActionLevel(action.level) in {ActionLevel.APPROVE,ActionLevel.EXECUTE}:
                 if governance_id is None:
                     pending=self.governance.request(ApprovalRequest(GovernanceAction(action.name,spec.name,RiskLevel.HIGH,deepcopy(action.arguments),tool_id=spec.id,action_level=spec.action_level.value),request.user_id))
@@ -56,10 +60,26 @@ class ToolExecutionGateway:
                         or approved_request.action.action_level != spec.action_level.value
                         or approved_request.action.arguments != action.arguments):
                     return self._failure(request,"governance approval does not match action or user",governance_id)
-                if not self.governance.can_execute(governance_id):
+                if not durable and not self.governance.can_execute(governance_id):
                     return self._failure(request,"governance approval not granted",governance_id)
                 if request.approval != ApprovalStatus.APPROVED:
                     return self._failure(request,"explicit execution approval required",governance_id)
+                if durable:
+                    payload=self.governance.ledger.claim(governance_id)
+                    if payload is None:
+                        return self._failure(request,"approval expired or consumed",governance_id)
+                    call=ToolCall(tool_name=spec.name,arguments=deepcopy(payload["arguments"]),id=governance_id)
+                    try:
+                        result=self.runtime.execute(call,approved=True)
+                        # Do not persist arbitrary provider outputs or secrets.
+                        recorded=self.governance.ledger.finish(governance_id,success=result.success,
+                            receipt={"call_id":str(call.id),"success":result.success})
+                        if not recorded:
+                            return self._failure(request,"execution receipt not committed; reconcile manually",governance_id)
+                        return GatewayResult(request.id,call,result,governance_id)
+                    except Exception:
+                        # Claim remains executing if receipt cannot be committed. Never retry.
+                        return self._failure(request,"execution outcome uncertain; reconcile manually",governance_id)
                 if not self.governance.consume(governance_id):
                     return self._failure(request,"approval expired or consumed",governance_id)
             call=ToolCall(tool_name=spec.name,arguments=dict(action.arguments))
